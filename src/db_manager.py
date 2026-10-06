@@ -25,15 +25,15 @@ class DatabaseManager:
                     viloyat TEXT,
                     tuman TEXT,
                     yonalish TEXT,
+                    aniq_yonalish TEXT,
                     holat TEXT,
                     murojaat_matni TEXT,
                     javob TEXT,
                     javob_bergan TEXT,
                     javob_sanasi TEXT,
-                    tashkilot_turi TEXT,
                     kategoriya TEXT,
                     is_1097 INTEGER,
-                    ijro_holati TEXT DEFAULT 'Yangi',
+                    ijro_holati TEXT DEFAULT 'Javob berilgan',
                     chora_mazmuni TEXT DEFAULT ''
                 )
             """)
@@ -44,7 +44,6 @@ class DatabaseManager:
             cursor = conn.cursor()
             for _, row in df.iterrows():
                 m_id = int(row.get('#', 0))
-                # Mavjudligini tekshirish
                 cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
                 exists = cursor.fetchone()
 
@@ -52,8 +51,8 @@ class DatabaseManager:
                     cursor.execute("""
                         INSERT INTO murojaatlar (
                             id, yaratilgan_sana, fish, telefon, viloyat, tuman,
-                            yonalish, holat, murojaat_matni, javob, javob_bergan,
-                            javob_sanasi, tashkilot_turi, kategoriya, is_1097, ijro_holati, chora_mazmuni
+                            yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan,
+                            javob_sanasi, kategoriya, is_1097, ijro_holati, chora_mazmuni
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         m_id,
@@ -63,28 +62,31 @@ class DatabaseManager:
                         str(row.get('Viloyat', '')),
                         str(row.get('Tuman', '')),
                         str(row.get('Yoʻnalish', '')),
+                        str(row.get('Aniq_Yonalish', '')),
                         str(row.get('Holat', '')),
                         str(row.get('Murojaat matni', '')),
                         str(row.get('Javob', '')),
                         str(row.get('Javob bergan', '')),
                         str(row.get('Javob sanasi', '')),
-                        str(row.get('Tashkilot_Turi', '')),
                         str(row.get('Kategoriya', '')),
-                        1 if row.get('1097_Yuborilgan') else 0,
-                        'Javob berilgan' if 'javob' in str(row.get('Holat', '')).lower() else 'Yangi',
+                        int(row.get('is_1097', 0)),
+                        'Javob berilgan',
                         ''
                     ))
                 else:
-                    # Mavjud bo'lsa yangi javob va matnlarni yangilaymiz
                     cursor.execute("""
                         UPDATE murojaatlar SET
-                            holat = ?, javob = ?, javob_bergan = ?, javob_sanasi = ?
+                            holat = ?, javob = ?, javob_bergan = ?, javob_sanasi = ?,
+                            aniq_yonalish = ?, kategoriya = ?, is_1097 = ?
                         WHERE id = ?
                     """, (
                         str(row.get('Holat', '')),
                         str(row.get('Javob', '')),
                         str(row.get('Javob bergan', '')),
                         str(row.get('Javob sanasi', '')),
+                        str(row.get('Aniq_Yonalish', '')),
+                        str(row.get('Kategoriya', '')),
+                        int(row.get('is_1097', 0)),
                         m_id
                     ))
             conn.commit()
@@ -110,16 +112,14 @@ class DatabaseManager:
                 'viloyat': 'Viloyat',
                 'tuman': 'Tuman',
                 'yonalish': 'Yoʻnalish',
+                'aniq_yonalish': 'Aniq_Yonalish',
                 'holat': 'Holat',
                 'murojaat_matni': 'Murojaat matni',
                 'javob': 'Javob',
                 'javob_bergan': 'Javob bergan',
                 'javob_sanasi': 'Javob sanasi',
-                'tashkilot_turi': 'Tashkilot_Turi',
                 'kategoriya': 'Kategoriya',
-                'is_1097': '1097_Yuborilgan',
                 'ijro_holati': 'Ijro_Holati',
                 'chora_mazmuni': 'Chora_Mazmuni'
             })
-            df['1097_Yuborilgan'] = df['1097_Yuborilgan'] == 1
             return df
