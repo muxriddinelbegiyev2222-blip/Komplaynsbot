@@ -10,14 +10,13 @@ class ReportGenerator:
     @staticmethod
     def export_excel(df, file_path):
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-            export_cols = ['#', 'Yaratilgan sana', 'F.I.Sh.', 'Telefon', 'Viloyat', 'Tuman', 'Yoʻnalish', 'Kategoriya', 'Ijro_Holati', 'Murojaat matni', 'Chora_Mazmuni', 'Javob']
+            export_cols = ['#', 'Yaratilgan sana', 'F.I.Sh.', 'Telefon', 'Viloyat', 'Tuman', 'Yoʻnalish', 'Kategoriya', 'Ijro_Holati', 'Murojaat matni', 'Organish_Natijasi']
             available = [c for c in export_cols if c in df.columns]
             sub_df = df[available].copy()
             sub_df.to_excel(writer, sheet_name="Murojaatlar", index=False)
             ws = writer.sheets["Murojaatlar"]
             ws.views.sheetView[0].showGridLines = True
 
-            # Ranglar va Ramkalar
             navy_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
             zebra_fill = PatternFill(start_color="F7F9FC", end_color="F7F9FC", fill_type="solid")
             thin_border = Border(
@@ -27,7 +26,6 @@ class ReportGenerator:
                 bottom=Side(style='thin', color='D9D9D9')
             )
 
-            # Sarlavha bezagi
             ws.row_dimensions[1].height = 28
             for col_num in range(1, len(available) + 1):
                 cell = ws.cell(row=1, column=col_num)
@@ -36,7 +34,6 @@ class ReportGenerator:
                 cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
                 cell.border = thin_border
 
-            # Qatorlar bezagi
             for r_idx in range(2, len(sub_df) + 2):
                 ws.row_dimensions[r_idx].height = 24
                 is_even = (r_idx % 2 == 0)
@@ -48,7 +45,6 @@ class ReportGenerator:
                         cell.fill = zebra_fill
                     cell.alignment = Alignment(vertical="center", wrap_text=True)
 
-            # Kengliklarni sozlash
             for c_idx, col_name in enumerate(available, 1):
                 col_letter = get_column_letter(c_idx)
                 if col_name in ['#']:
@@ -64,14 +60,12 @@ class ReportGenerator:
     def export_word_report(stats, reg_stats, file_path, period_name="Barcha davr"):
         doc = Document()
 
-        # Sahifa sozlamalari
         section = doc.sections[0]
         section.top_margin = Inches(0.8)
         section.bottom_margin = Inches(0.8)
         section.left_margin = Inches(1.0)
         section.right_margin = Inches(0.8)
 
-        # Sarlavha
         p_title = doc.add_paragraph()
         p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         r1 = p_title.add_run("O‘ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI\n")
@@ -86,16 +80,14 @@ class ReportGenerator:
         r3.font.size = Pt(14)
         r3.font.color.rgb = RGBColor(31, 73, 125)
 
-        # Matn qismi
         p_body = doc.add_paragraph()
         p_body.paragraph_format.line_spacing = 1.25
         p_body.add_run(
             f"Kadastr tizimi korrupsiyaga qarshi kurashish rasmiy Telegram boti orqali "
-            f"hisobot davrida jami {stats['total']} ta murojaat kelib tushgan. "
+            f"hisobot davrida jami {stats['total']} ta murojaat kelib tushgan (sinov va test xabarlari chiqarib tashlangan holda). "
             f"Ushbu murojaatlarning mazmuni va ijrosi quyidagicha taqsimlangan:\n"
         )
 
-        # Statistika jadvali
         table = doc.add_table(rows=1, cols=3)
         table.style = 'Light Shading Accent 1'
         hdr_cells = table.rows[0].cells
@@ -104,14 +96,14 @@ class ReportGenerator:
         hdr_cells[2].text = "Soni (ta)"
 
         data_rows = [
-            ("1", "Jami kelib tushgan murojaatlar", str(stats['total'])),
+            ("1", "Jami haqiqiy murojaatlar", str(stats['total'])),
             ("2", "Korrupsiya va ta’magirlik alomatlari keltirilgan", str(stats['korrupsiya'])),
-            ("3", "Sohaviy va 1097 raqamiga yo‘naltirilgan murojaatlar", str(stats['sent_1097'])),
-            ("4", "Hozirda hududlarda o‘rganishda bo‘lgan murojaatlar", str(stats['organishda'])),
-            ("5", "Bartaraf etilgan yoki qonuniy chora ko‘rilgan", str(stats['bartaraf']))
+            ("3", "Hududiy bo'linmalarda o‘rganishda bo‘lgan murojaatlar", str(stats['organishda'])),
+            ("4", "Natijasi kiritilgan (bartaraf etilgan / chora ko'rilgan)", str(stats['natija_kiritilgan'])),
+            ("5", "O'rganish natijasida asossiz deb topilgan", str(stats['asossiz']))
         ]
 
-        for r_num, row in enumerate(data_rows, 1):
+        for row in data_rows:
             row_cells = table.add_row().cells
             row_cells[0].text = row[0]
             row_cells[1].text = row[1]
