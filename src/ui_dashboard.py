@@ -85,7 +85,7 @@ class DashboardApp(ctk.CTk):
         filter_box.pack(fill="x", pady=(0, 10), padx=5)
 
         ctk.CTkLabel(filter_box, text="⏳ Davr:", font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=(12, 4), pady=8)
-        self.cb_period = ctk.CTkComboBox(filter_box, values=["Barchasi", "Joriy hafta", "Joriy oy", "Joriy yil"], command=self._apply_filters, width=105, font=ctk.CTkFont(size=11))
+        self.cb_period = ctk.CTkComboBox(filter_box, values=["Barchasi", "Joriy hafta", "Joriy oy", "Joriy yil"], command=self._apply_filters, width=110, font=ctk.CTkFont(size=11))
         self.cb_period.set(getattr(self, 'selected_period', 'Barchasi'))
         self.cb_period.pack(side="left", padx=4, pady=8)
 
@@ -98,7 +98,7 @@ class DashboardApp(ctk.CTk):
             "Davlat kadastrlari palatasi hududiy boshqarmasi",
             "Boshqa tizim tashkiloti"
         ]
-        self.cb_yonalish = ctk.CTkComboBox(filter_box, values=yonalish_options, command=self._apply_filters, width=260, font=ctk.CTkFont(size=11))
+        self.cb_yonalish = ctk.CTkComboBox(filter_box, values=yonalish_options, command=self._apply_filters, width=280, font=ctk.CTkFont(size=11))
         self.cb_yonalish.set(getattr(self, 'selected_yonalish', 'Barchasi'))
         self.cb_yonalish.pack(side="left", padx=4, pady=8)
 
@@ -109,21 +109,20 @@ class DashboardApp(ctk.CTk):
             "Davlat kadastrlari palatasi hududiy komplayens xodimi",
             "Agentlik markaziy apparati mas’ul xodimi"
         ]
-        self.cb_masul = ctk.CTkComboBox(filter_box, values=masul_options, command=self._apply_filters, width=220, font=ctk.CTkFont(size=11))
+        self.cb_masul = ctk.CTkComboBox(filter_box, values=masul_options, command=self._apply_filters, width=240, font=ctk.CTkFont(size=11))
         self.cb_masul.set(getattr(self, 'selected_masul', 'Barchasi'))
         self.cb_masul.pack(side="left", padx=4, pady=8)
 
         btn_reset = ctk.CTkButton(filter_box, text="Tozalash", width=65, height=28, fg_color="#95A5A6", hover_color="#7F8C8D", font=ctk.CTkFont(size=11), command=self._reset_filters)
         btn_reset.pack(side="left", padx=8, pady=8)
 
-        # KPI Kartochkalari (Alohida Agentlik va Palata o'rganishi bilan)
+        # KPI Kartochkalari (Korrupsiya alomati olib tashlangan, 5 ta tekis blok)
         cards_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         cards_frame.pack(fill="x", pady=(0, 10))
 
         stats = self.loader.get_kpi_stats()
         cards = [
             ("JAMI MUROJAATLAR", stats['total'], "#1F497D", lambda: self.show_records_view("Barcha murojaatlar", self.loader.filtered_df)),
-            ("KORRUPSIYA ALOMATI", stats['korrupsiya'], "#C0392B", lambda: self.show_records_view("Korrupsiyaga oid murojaatlar", self.loader.filtered_df[self.loader.filtered_df['Kategoriya'] == 'Korrupsiyaga oid'])),
             ("AGENTLIKDA O‘RGANISHDA", stats['agentlik_organish'], "#2980B9", lambda: self.show_records_view("Agentlik komplayensida o‘rganishdagi murojaatlar", self.loader.filtered_df[self.loader.filtered_df['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False) & self.loader.filtered_df['Masul_Komplayens'].astype(str).str.contains("agentligi", case=False, na=False)])),
             ("PALATADA O‘RGANISHDA", stats['palata_organish'], "#8E44AD", lambda: self.show_records_view("Palata komplayensida o‘rganishdagi murojaatlar", self.loader.filtered_df[self.loader.filtered_df['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False) & self.loader.filtered_df['Masul_Komplayens'].astype(str).str.contains("palata", case=False, na=False)])),
             ("O‘RGANIB CHIQILGAN", stats['natija_kiritilgan'], "#27AE60", lambda: self.show_records_view("O‘rganib chiqilgan va natijasi kiritilgan", self.loader.filtered_df[self.loader.filtered_df['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora|O‘rganib chiqildi", case=False, na=False)])),
@@ -132,14 +131,14 @@ class DashboardApp(ctk.CTk):
 
         for i, (title, val, color, cmd) in enumerate(cards):
             card = ctk.CTkFrame(cards_frame, fg_color=color, corner_radius=8)
-            card.grid(row=0, column=i, padx=3, sticky="nsew")
+            card.grid(row=0, column=i, padx=4, sticky="nsew")
             cards_frame.grid_columnconfigure(i, weight=1)
 
-            ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=9, weight="bold"), text_color="#E0E6ED").pack(pady=(6, 1))
-            ctk.CTkLabel(card, text=str(val), font=ctk.CTkFont(size=22, weight="bold"), text_color="white").pack(pady=(0, 2))
-            ctk.CTkButton(card, text="Ochish ➔", width=70, height=20, fg_color="transparent", border_width=1, border_color="white", font=ctk.CTkFont(size=9), command=cmd).pack(pady=(0, 6))
+            ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=10, weight="bold"), text_color="#E0E6ED").pack(pady=(8, 2))
+            ctk.CTkLabel(card, text=str(val), font=ctk.CTkFont(size=24, weight="bold"), text_color="white").pack(pady=(0, 2))
+            ctk.CTkButton(card, text="Ochish ➔", width=75, height=22, fg_color="transparent", border_width=1, border_color="white", font=ctk.CTkFont(size=10), command=cmd).pack(pady=(0, 8))
 
-        # Asosiy jadval paneli (Yengil va silliq)
+        # Asosiy jadval paneli (Aniq katakchalar / Grid chiziqlari bilan)
         content = ctk.CTkFrame(self.container, fg_color="white", corner_radius=8)
         content.pack(fill="both", expand=True, padx=5, pady=(0, 5))
 
@@ -149,44 +148,65 @@ class DashboardApp(ctk.CTk):
         table_frame = ctk.CTkFrame(content, fg_color="transparent")
         table_frame.pack(fill="both", expand=True, padx=15, pady=(0, 10))
 
-        cols = ("viloyat", "jami", "korrupsiya", "agentlik_org", "palata_org", "hal_etilgan")
+        cols = ("viloyat", "jami", "agentlik_org", "palata_org", "hal_etilgan", "asossiz")
         style = ttk.Style()
         style.theme_use("clam")
-        style.configure("Dash.Treeview", rowheight=30, font=("Calibri", 11))
-        style.configure("Dash.Treeview.Heading", font=("Calibri", 11, "bold"), background="#E4E9F2")
+        
+        # Grid (katakchalar chegaralari) to'liq chizilishi uchun uslub
+        style.configure("Dash.Treeview", 
+                        rowheight=30, 
+                        font=("Calibri", 11),
+                        background="#FFFFFF",
+                        fieldbackground="#FFFFFF",
+                        bordercolor="#CBD5E1",
+                        lightcolor="#CBD5E1",
+                        darkcolor="#CBD5E1",
+                        borderwidth=1)
+        style.configure("Dash.Treeview.Heading", 
+                        font=("Calibri", 11, "bold"), 
+                        background="#E2E8F0", 
+                        foreground="#1F497D",
+                        bordercolor="#CBD5E1",
+                        borderwidth=1)
+        style.map("Dash.Treeview", background=[("selected", "#3B82F6")])
 
         self.dash_tree = ttk.Treeview(table_frame, columns=cols, show="headings", style="Dash.Treeview", selectmode="browse")
         self.dash_tree.heading("viloyat", text="Hudud nomi (Viloyat)")
         self.dash_tree.heading("jami", text="Jami murojaat")
-        self.dash_tree.heading("korrupsiya", text="Korrupsiya alomati")
         self.dash_tree.heading("agentlik_org", text="Agentlikda o‘rganishda")
         self.dash_tree.heading("palata_org", text="Palatada o‘rganishda")
         self.dash_tree.heading("hal_etilgan", text="O‘rganib chiqilgan")
+        self.dash_tree.heading("asossiz", text="Asossiz deb topilgan")
 
-        self.dash_tree.column("viloyat", width=240)
-        self.dash_tree.column("jami", width=110, anchor="center")
-        self.dash_tree.column("korrupsiya", width=130, anchor="center")
-        self.dash_tree.column("agentlik_org", width=150, anchor="center")
-        self.dash_tree.column("palata_org", width=150, anchor="center")
-        self.dash_tree.column("hal_etilgan", width=140, anchor="center")
+        self.dash_tree.column("viloyat", width=250)
+        self.dash_tree.column("jami", width=120, anchor="center")
+        self.dash_tree.column("agentlik_org", width=160, anchor="center")
+        self.dash_tree.column("palata_org", width=160, anchor="center")
+        self.dash_tree.column("hal_etilgan", width=150, anchor="center")
+        self.dash_tree.column("asossiz", width=150, anchor="center")
 
         vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.dash_tree.yview)
         self.dash_tree.configure(yscrollcommand=vsb.set)
         self.dash_tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
+        # Katakchalar chiziqlari (Grid) va qatorlar fonini o'rnatish
+        self.dash_tree.tag_configure('odd', background='#F8FAFC')
+        self.dash_tree.tag_configure('even', background='#FFFFFF')
+
         f_df = self.loader.filtered_df
         reg_groups = f_df.groupby('Viloyat') if not f_df.empty else []
 
-        for reg, group in reg_groups:
+        for idx, (reg, group) in enumerate(reg_groups):
             c_tot = len(group)
-            c_kor = len(group[group['Kategoriya'] == 'Korrupsiyaga oid'])
             is_org = group['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)
             c_ag = len(group[is_org & group['Masul_Komplayens'].astype(str).str.contains("agentligi", case=False, na=False)])
             c_pa = len(group[is_org & group['Masul_Komplayens'].astype(str).str.contains("palata", case=False, na=False)])
             c_hal = len(group[group['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora|O‘rganib chiqildi", case=False, na=False)])
-            
-            self.dash_tree.insert("", "end", values=(reg, f"{c_tot} ta", f"{c_kor} ta", f"{c_ag} ta", f"{c_pa} ta", f"{c_hal} ta"))
+            c_as = len(group[group['Ijro_Holati'].astype(str).str.contains("Asossiz", case=False, na=False)])
+
+            tag = 'even' if idx % 2 == 0 else 'odd'
+            self.dash_tree.insert("", "end", values=(reg, f"{c_tot} ta", f"{c_ag} ta", f"{c_pa} ta", f"{c_hal} ta", f"{c_as} ta"), tags=(tag,))
 
         def on_region_open(event):
             sel = self.dash_tree.selection()
@@ -212,7 +232,7 @@ class DashboardApp(ctk.CTk):
         self.selected_period = "Barchasi"
         self.selected_yonalish = "Barchasi"
         self.selected_masul = "Barchasi"
-        self.loader.filter_data("Barchasi", "Barchasi", "Barchasi", "Barchasi")
+        self.loader.filter_data("Barchasi", "Barchasi", "Barchasi")
         self.show_dashboard_view()
 
     def _drill_down_region(self, reg_name):
@@ -245,8 +265,17 @@ class DashboardApp(ctk.CTk):
         cols = ("#", "sana", "fish", "telefon", "viloyat", "tuman", "masul", "ijro")
         style = ttk.Style()
         style.theme_use("clam")
-        style.configure("Rec.Treeview", rowheight=28, font=("Calibri", 11))
-        style.configure("Rec.Treeview.Heading", font=("Calibri", 11, "bold"), background="#E4E9F2")
+        style.configure("Rec.Treeview", 
+                        rowheight=28, 
+                        font=("Calibri", 11),
+                        bordercolor="#CBD5E1",
+                        borderwidth=1)
+        style.configure("Rec.Treeview.Heading", 
+                        font=("Calibri", 11, "bold"), 
+                        background="#E2E8F0",
+                        foreground="#1F497D",
+                        bordercolor="#CBD5E1",
+                        borderwidth=1)
 
         tree = ttk.Treeview(tree_frame, columns=cols, show="headings", style="Rec.Treeview", selectmode="browse")
         tree.heading("#", text="#")
@@ -272,14 +301,18 @@ class DashboardApp(ctk.CTk):
         tree.pack(side="left", fill="both", expand=True)
         vsb.pack(side="right", fill="y")
 
+        tree.tag_configure('odd', background='#F8FAFC')
+        tree.tag_configure('even', background='#FFFFFF')
+
         def populate(df_to_show):
             tree.delete(*tree.get_children())
-            for _, r in df_to_show.iterrows():
+            for idx, (_, r) in enumerate(df_to_show.iterrows()):
+                tag = 'even' if idx % 2 == 0 else 'odd'
                 tree.insert("", "end", values=(
                     r.get('#'), str(r.get('Yaratilgan sana'))[:16], r.get('F.I.Sh.'),
                     r.get('Telefon'), r.get('Viloyat'), r.get('Tuman'),
                     r.get('Masul_Komplayens', 'Agentlik hududiy komplayens'), r.get('Ijro_Holati', 'O‘rganishga yuborilgan')
-                ))
+                ), tags=(tag,))
 
         populate(data_df)
 
@@ -326,14 +359,12 @@ class DashboardApp(ctk.CTk):
                    f"🏢 Yo'nalish: {rec.get('Yoʻnalish')}\n🕒 Kelib tushgan sana: {rec.get('Yaratilgan sana')}"
         ctk.CTkLabel(info_top, text=txt_info, justify="left", font=ctk.CTkFont(size=13, weight="bold")).pack(padx=15, pady=8, anchor="w")
 
-        # Katta va tiniq matn oynasi
         ctk.CTkLabel(main_scroll, text="📝 Murojaat matni (to‘liq shaklda):", font=ctk.CTkFont(size=13, weight="bold"), text_color="#1F497D").pack(padx=15, anchor="w")
         tb_m = ctk.CTkTextbox(main_scroll, height=220, wrap="word", font=ctk.CTkFont(size=13))
         tb_m.insert("1.0", str(rec.get('Murojaat matni', '')))
         tb_m.configure(state="disabled")
         tb_m.pack(fill="x", padx=15, pady=(4, 10))
 
-        # Yuborilgan rasmiy javob
         ctk.CTkLabel(main_scroll, text="✉️ Bot orqali fuqaroga yuborilgan rasmiy javob:", font=ctk.CTkFont(size=12, weight="bold")).pack(padx=15, anchor="w")
         tb_j = ctk.CTkTextbox(main_scroll, height=65, wrap="word", font=ctk.CTkFont(size=12))
         rasmiy_javob_shablon = "Ассалому алайкум, ҳурматли фуқаро. Сизнинг мурожаатингиз бўйича ҳолатларга аниқлик киритиш мақсадида Коррупцияга қарши курашиш бўлими ходимлари телефон рақамингиз орқали Сиз билан боғланади."
@@ -341,13 +372,11 @@ class DashboardApp(ctk.CTk):
         tb_j.configure(state="disabled")
         tb_j.pack(fill="x", padx=15, pady=(4, 10))
 
-        # CRM va Ijrochi tayinlash qismi
         action_frame = ctk.CTkFrame(main_scroll, fg_color="#EEF2F7", corner_radius=6)
         action_frame.pack(fill="x", padx=15, pady=(5, 12))
 
         ctk.CTkLabel(action_frame, text="⚙️ KOMPLAYENS NAZORAT, MAS’UL TAYINLASH VA O‘RGANISH NATIJASI:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#1F497D").pack(padx=15, pady=(8, 4), anchor="w")
 
-        # 1-qator: O'rganishga yuboriladigan mas'ul xodim / organ
         row_masul = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_masul.pack(fill="x", padx=15, pady=3)
 
@@ -366,7 +395,6 @@ class DashboardApp(ctk.CTk):
         cb_masul_item.set(str(rec.get('Masul_Komplayens', 'Kadastr agentligi hududiy komplayens xodimi')))
         cb_masul_item.pack(side="left")
 
-        # 2-qator: Holati
         row_status = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_status.pack(fill="x", padx=15, pady=4)
 
@@ -380,13 +408,11 @@ class DashboardApp(ctk.CTk):
         cb_status.set(str(rec.get('Ijro_Holati', 'O‘rganishga yuborilgan')))
         cb_status.pack(side="left")
 
-        # 3-qator: O'rganish natijasi
         ctk.CTkLabel(action_frame, text="Hududiy komplayens xodimining o‘rganish xulosasi va ko‘rilgan choralar mazmuni:", font=ctk.CTkFont(size=12, weight="bold")).pack(padx=15, pady=(6, 2), anchor="w")
         tb_natija = ctk.CTkTextbox(action_frame, height=85, wrap="word", font=ctk.CTkFont(size=12))
         tb_natija.insert("1.0", str(rec.get('Organish_Natijasi', '')))
         tb_natija.pack(fill="x", padx=15, pady=(0, 8))
 
-        # Fayl biriktirish bloki
         self.attached_file_path = str(rec.get('Biriktirilgan_Fayl', ''))
 
         file_box = ctk.CTkFrame(action_frame, fg_color="white", corner_radius=5)
