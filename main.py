@@ -1,19 +1,24 @@
 import os
 import sys
+
+# PyInstaller kutubxonalarni to'liq ko'rishi uchun majburiy importlar:
+import pandas as pd
+import openpyxl
+import customtkinter as ctk
+import matplotlib
+import PIL
+
 from src.data_loader import DataLoader
 from src.ui_dashboard import DashboardApp
-import customtkinter as ctk
 from tkinter import filedialog, messagebox
 
 def main():
-    # Standart excel yo'li
     default_excel = os.path.join("data", "murojaatlar.xlsx")
-    
     excel_path = None
+    
     if os.path.exists(default_excel):
         excel_path = default_excel
     else:
-        # Fayl topilmasa, foydalanuvchidan tanlashni so'raydi
         ctk.set_appearance_mode("System")
         root = ctk.CTk()
         root.withdraw()
