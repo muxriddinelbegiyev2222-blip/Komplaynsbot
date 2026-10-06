@@ -20,6 +20,11 @@ class DataLoader:
     def load_from_excel(self, file_path):
         raw_df = pd.read_excel(file_path)
         raw_df.columns = [col.strip() for col in raw_df.columns]
+        
+        # 1 dan 9 gacha bo'lgan test xabarlarini butunlay chiqarib tashlash
+        if '#' in raw_df.columns:
+            raw_df = raw_df[raw_df['#'] > 9]
+
         self._classify(raw_df)
         self.db.sync_excel_data(raw_df)
         self.refresh_data()
@@ -43,29 +48,19 @@ class DataLoader:
                 return 'Davlat kadastrlari palatasi hududiy boshqarmasi'
             return 'Boshqa tizim tashkiloti'
 
-        def check_1097(val):
-            return 1 if '1097' in str(val) else 0
-
         corruption_words = [
             'pora', 'tamagir', 'ta’magir', 'тамагир', 'таъмагир', 'порахоʻр', 'порахор',
             'korup', 'корруп', 'каруп', 'karup', 'pul talab', 'пул талаб', 
             'pora olish', 'pora berish', 'suiiste', 'суиисте'
         ]
-        test_words = ['test', 'тест', 'lorem', 'фыва', 'alo', 'yangilash', '123']
 
         def get_cat(row):
             matn = str(row.get('Murojaat matni', '')).lower()
-            name = str(row.get('F.I.Sh.', '')).lower()
-            if any(w in matn for w in test_words) or any(w in name for w in ['test', 'nnn', 'ааа']):
-                return 'Test/Texnik'
-            elif any(w in matn for w in corruption_words):
+            if any(w in matn for w in corruption_words):
                 return 'Korrupsiyaga oid'
-            elif '1097' in str(row.get('Javob', '')):
-                return '1097 ga yo‘naltirilgan'
             return 'Sohaviy/Umumiy'
 
         df['Aniq_Yonalish'] = df['Yoʻnalish'].apply(get_exact_yonalish)
-        df['is_1097'] = df['Javob'].apply(check_1097)
         df['Kategoriya'] = df.apply(get_cat, axis=1)
 
     def filter_data(self, period='Barchasi', yonalish='Barchasi', category='Barchasi'):
@@ -74,6 +69,7 @@ class DataLoader:
             self.filtered_df = temp
             return temp
 
+        # Vaqt filtri
         if 'DT' in temp.columns and temp['DT'].notnull().any():
             max_date = temp['DT'].max()
             if period == 'Joriy hafta':
@@ -84,13 +80,13 @@ class DataLoader:
             elif period == 'Joriy yil':
                 temp = temp[temp['DT'].dt.year == max_date.year]
 
+        # Yo'nalish filtri
         if yonalish != 'Barchasi':
             temp = temp[temp['Aniq_Yonalish'] == yonalish]
 
+        # Kategoriya filtri
         if category == 'Korrupsiyaga oid':
             temp = temp[temp['Kategoriya'] == 'Korrupsiyaga oid']
-        elif category == '1097 ga yo‘naltirilgan':
-            temp = temp[temp['is_1097'] == 1]
         elif category == 'Sohaviy/Umumiy':
             temp = temp[temp['Kategoriya'] == 'Sohaviy/Umumiy']
 
@@ -101,17 +97,23 @@ class DataLoader:
         d = self.filtered_df
         total = len(d)
         if total == 0:
-            return {"total": 0, "korrupsiya": 0, "sent_1097": 0, "organishda": 0, "bartaraf": 0}
+            return {"total": 0, "korrupsiya": 0, "organishda": 0, "natija_kiritilgan": 0, "asossiz": 0}
 
         korrupsiya_count = len(d[d['Kategoriya'] == 'Korrupsiyaga oid'])
-        sent_1097_count = len(d[d['is_1097'] == 1])
+        
+        # O'rganishda turganlar
         organishda_count = len(d[d['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)])
-        bartaraf_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora", case=False, na=False)])
+        
+        # Natijasi kiritilgan (Bartaraf etilgan yoki chora ko'rilgan)
+        natija_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora", case=False, na=False)])
+        
+        # Asossiz deb topilgan
+        asossiz_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Asossiz", case=False, na=False)])
 
         return {
             "total": total,
             "korrupsiya": korrupsiya_count,
-            "sent_1097": sent_1097_count,
             "organishda": organishda_count,
-            "bartaraf": bartaraf_count
+            "natija_kiritilgan": natija_count,
+            "asossiz": asossiz_count
         }
