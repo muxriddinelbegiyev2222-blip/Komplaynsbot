@@ -21,7 +21,6 @@ class DataLoader:
         raw_df = pd.read_excel(file_path)
         raw_df.columns = [col.strip() for col in raw_df.columns]
         
-        # 1 dan 9 gacha bo'lgan test xabarlarini butunlay chiqarib tashlash
         if '#' in raw_df.columns:
             raw_df = raw_df[raw_df['#'] > 9]
 
@@ -38,24 +37,19 @@ class DataLoader:
     def _classify(self, df):
         def get_exact_yonalish(val):
             s = str(val).strip()
-            if 'markaziy apparati' in s and 'Kadastr agentligi' in s:
-                return 'Kadastr agentligi markaziy apparati'
-            elif 'hududiy boshqarmasi' in s and 'Kadastr agentligi' in s:
-                return 'Kadastr agentligi hududiy boshqarmasi'
-            elif 'markaziy apparati' in s and 'palatasi' in s:
-                return 'Davlat kadastrlari palatasi markaziy apparati'
-            elif 'hududiy boshqarmasi' in s and 'palatasi' in s:
+            if 'palata' in s.lower():
                 return 'Davlat kadastrlari palatasi hududiy boshqarmasi'
-            return 'Boshqa tizim tashkiloti'
+            return 'Kadastr agentligi hududiy boshqarmasi'
 
         df['Aniq_Yonalish'] = df['Yoʻnalish'].apply(get_exact_yonalish)
 
-    def filter_data(self, period='Barchasi', yonalish='Barchasi', masul='Barchasi'):
+    def filter_data(self, period='Barchasi', yonalish='Barchasi', masul='Barchasi', search_query=''):
         temp = self.df.copy()
         if temp.empty:
             self.filtered_df = temp
             return temp
 
+        # Davr filtri
         if 'DT' in temp.columns and temp['DT'].notnull().any():
             max_date = temp['DT'].max()
             if period == 'Joriy hafta':
@@ -66,11 +60,25 @@ class DataLoader:
             elif period == 'Joriy yil':
                 temp = temp[temp['DT'].dt.year == max_date.year]
 
+        # Yo'nalish filtri
         if yonalish != 'Barchasi':
             temp = temp[temp['Aniq_Yonalish'] == yonalish]
 
+        # Mas'ul komplayens filtri
         if masul != 'Barchasi':
             temp = temp[temp['Masul_Komplayens'] == masul]
+
+        # Global qidiruv (Search poisk)
+        if search_query:
+            q = str(search_query).strip().lower()
+            temp = temp[
+                temp['F.I.Sh.'].astype(str).str.lower().str.contains(q) |
+                temp['Telefon'].astype(str).str.lower().str.contains(q) |
+                temp['Viloyat'].astype(str).str.lower().str.contains(q) |
+                temp['Tuman'].astype(str).str.lower().str.contains(q) |
+                temp['Murojaat matni'].astype(str).str.lower().str.contains(q) |
+                temp['Organish_Natijasi'].astype(str).str.lower().str.contains(q)
+            ]
 
         self.filtered_df = temp
         return temp
