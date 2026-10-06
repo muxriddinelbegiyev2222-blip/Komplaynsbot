@@ -4,6 +4,7 @@ import os
 import shutil
 import urllib.parse
 import webbrowser
+from datetime import datetime
 from PIL import Image, ImageDraw
 from src.report_generator import ReportGenerator
 
@@ -70,7 +71,6 @@ class DashboardApp(ctk.CTk):
         )
         self.lbl_path.pack(side="left", padx=10, pady=15)
 
-        # Xodimlar ma'lumotnomasi va eksportlar
         btn_word = ctk.CTkButton(
             nav, text="📄 Word Ma'lumotnoma", width=145, height=34,
             fg_color="#8B3A2B", hover_color="#A94442", font=ctk.CTkFont(size=11, weight="bold"),
@@ -169,7 +169,7 @@ class DashboardApp(ctk.CTk):
             ctk.CTkLabel(card, text=str(val), font=ctk.CTkFont(size=22, weight="bold"), text_color="#FFFFFF").pack(pady=(0, 1))
             ctk.CTkButton(card, text="Ochish ➔", width=70, height=20, fg_color="transparent", border_width=1, border_color="#CBD5E1", font=ctk.CTkFont(size=9), command=cmd).pack(pady=(0, 6))
 
-        # Viloyatlar jadvali (O'rtadagi asosiy jadval)
+        # Viloyatlar jadvali
         table_container = ctk.CTkFrame(self.container, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#CBD5E1")
         table_container.pack(fill="both", expand=True, padx=2, pady=(0, 8))
 
@@ -230,39 +230,95 @@ class DashboardApp(ctk.CTk):
 
         self.dash_tree.bind("<Double-1>", on_region_open)
 
-        # ================= PASTKI 4 TA ANALITIK BLOK (SKRINSHOTDAGI BO'SH JOY) =================
+        # ================= PASTKI 4 TA ANALITIK BLOK (BOSILADIGAN VA ICHIGA KIRILADIGAN QILINGAN) =================
         bottom_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         bottom_frame.pack(fill="x", pady=(0, 2))
 
-        # 1-BLOK: SLA / Ijro muddati
+        # Funksiyalar (ichiga kirish filtratsiyasi)
+        now_date = datetime.now()
+        is_org_mask = f_df['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)
+
+        def open_muddati_otgan():
+            df_org = f_df[is_org_mask].copy()
+            if not df_org.empty and 'DT' in df_org.columns:
+                sub = df_org[(now_date - df_org['DT']).dt.days > 15]
+                self.show_records_view("Muddati o‘tgan murojaatlar (>15 kun)", sub)
+
+        def open_ogohlantirish():
+            df_org = f_df[is_org_mask].copy()
+            if not df_org.empty and 'DT' in df_org.columns:
+                days = (now_date - df_org['DT']).dt.days
+                sub = df_org[(days >= 10) & (days <= 15)]
+                self.show_records_view("Ogohlantirish: Muddati tugayotganlar (10-15 kun)", sub)
+
+        def open_takroriy():
+            clean_phones = f_df['Telefon'].astype(str).str.strip()
+            dup = clean_phones.value_counts()
+            sub = f_df[f_df['Telefon'].isin(dup[dup > 1].index)].sort_values(by='Telefon')
+            self.show_records_view("Takroriy kelib tushgan murojaatlar", sub)
+
+        def open_choralar():
+            sub = f_df[f_df['Chora_Turi'].astype(str).str.contains("Xayfsan|Lavozimidan ozod|Prokuratura|Jarima", case=False, na=False)]
+            self.show_records_view("Intizomiy chora ko‘rilgan murojaatlar", sub)
+
+        def open_quarter(q_num):
+            if 'DT' in f_df.columns and f_df['DT'].notnull().any():
+                sub = f_df[f_df['DT'].dt.quarter == q_num]
+                self.show_records_view(f"{q_num}-chorak murojaatlari", sub)
+
+        # 1-BLOK: IJRO MUDDATI NAZORATI
         b1 = ctk.CTkFrame(bottom_frame, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#E2E8F0")
         b1.grid(row=0, column=0, padx=3, sticky="nsew")
-        ctk.CTkLabel(b1, text="⏱ IJRO MUDDATI NAZORATI", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(6, 2))
-        ctk.CTkLabel(b1, text=f"🔴 Muddati o‘tgan (>15 kun): {stats['muddati_otgan_15']} ta", font=ctk.CTkFont(size=12, weight="bold"), text_color="#C0392B").pack(anchor="w", padx=12, pady=1)
-        ctk.CTkLabel(b1, text=f"🟡 Ogohlantirish (10-15 kun): {stats['ogohlantirish_10']} ta", font=ctk.CTkFont(size=11, weight="bold"), text_color="#D35400").pack(anchor="w", padx=12, pady=1)
-        ctk.CTkLabel(b1, text="Qonuniy muddat: 15 kalendar kun", font=ctk.CTkFont(size=10, slant="italic"), text_color="#7F8C8D").pack(anchor="w", padx=12, pady=(1, 6))
+        ctk.CTkLabel(b1, text="⏱ IJRO MUDDATI NAZORATI", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(4, 2))
 
-        # 2-BLOK: Takroriy murojaatlar
+        btn_sla1 = ctk.CTkButton(b1, text=f"🔴 Muddati o‘tgan (>15 kun): {stats['muddati_otgan_15']} ta ➔", 
+                                 fg_color="#FDF2F2", text_color="#C0392B", hover_color="#FDE8E8", 
+                                 font=ctk.CTkFont(size=11, weight="bold"), height=24, anchor="w", command=open_muddati_otgan)
+        btn_sla1.pack(fill="x", padx=8, pady=2)
+
+        btn_sla2 = ctk.CTkButton(b1, text=f"🟡 Ogohlantirish (10-15 kun): {stats['ogohlantirish_10']} ta ➔", 
+                                 fg_color="#FEF9E7", text_color="#D35400", hover_color="#FCF3CF", 
+                                 font=ctk.CTkFont(size=11, weight="bold"), height=24, anchor="w", command=open_ogohlantirish)
+        btn_sla2.pack(fill="x", padx=8, pady=2)
+        ctk.CTkLabel(b1, text="Muddati buzilganlarni ko'rish uchun bosing", font=ctk.CTkFont(size=9, slant="italic"), text_color="#7F8C8D").pack(pady=(0, 4))
+
+        # 2-BLOK: TAKRORIY MUROJAATLAR
         b2 = ctk.CTkFrame(bottom_frame, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#E2E8F0")
         b2.grid(row=0, column=1, padx=3, sticky="nsew")
-        ctk.CTkLabel(b2, text="🔄 TAKRORIY MUROJAATLAR", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(6, 2))
-        ctk.CTkLabel(b2, text=f"Takroriy kelganlar: {stats['takroriy_soni']} ta", font=ctk.CTkFont(size=13, weight="bold"), text_color="#2980B9").pack(pady=1)
-        ctk.CTkLabel(b2, text="Bitta fuqaro/raqamdan qayta arizalar", font=ctk.CTkFont(size=10, slant="italic"), text_color="#7F8C8D").pack(pady=(1, 6))
+        ctk.CTkLabel(b2, text="🔄 TAKRORIY MUROJAATLAR", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(4, 2))
 
-        # 3-BLOK: Ko'rilgan choralar hisobi
+        btn_dup = ctk.CTkButton(b2, text=f"Takroriy kelganlar: {stats['takroriy_soni']} ta ➔", 
+                                fg_color="#EBF5FB", text_color="#2980B9", hover_color="#D4E6F1", 
+                                font=ctk.CTkFont(size=12, weight="bold"), height=30, command=open_takroriy)
+        btn_dup.pack(fill="x", padx=12, pady=5)
+        ctk.CTkLabel(b2, text="Bitta raqamdan qayta yozganlar ro'yxati", font=ctk.CTkFont(size=9, slant="italic"), text_color="#7F8C8D").pack(pady=(0, 4))
+
+        # 3-BLOK: INTIZOMIY CHORALAR
         b3 = ctk.CTkFrame(bottom_frame, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#E2E8F0")
         b3.grid(row=0, column=2, padx=3, sticky="nsew")
-        ctk.CTkLabel(b3, text="⚖️ INTIZOMIY CHORALAR", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(6, 2))
-        ctk.CTkLabel(b3, text=f"Qo‘llanilgan choralar: {stats['chora_krilgan_soni']} ta", font=ctk.CTkFont(size=13, weight="bold"), text_color="#27AE60").pack(pady=1)
-        ctk.CTkLabel(b3, text="Xayfsan, jarima, lavozimdan ozod va h.k.", font=ctk.CTkFont(size=10, slant="italic"), text_color="#7F8C8D").pack(pady=(1, 6))
+        ctk.CTkLabel(b3, text="⚖️ INTIZOMIY CHORALAR", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(4, 2))
 
-        # 4-BLOK: Kvartal (Choraklar)
+        btn_cho = ctk.CTkButton(b3, text=f"Ko‘rilgan choralar: {stats['chora_krilgan_soni']} ta ➔", 
+                                fg_color="#EAFAF1", text_color="#27AE60", hover_color="#D5F5E3", 
+                                font=ctk.CTkFont(size=12, weight="bold"), height=30, command=open_choralar)
+        btn_cho.pack(fill="x", padx=12, pady=5)
+        ctk.CTkLabel(b3, text="Xayfsan, jarima, ozod etilganlar", font=ctk.CTkFont(size=9, slant="italic"), text_color="#7F8C8D").pack(pady=(0, 4))
+
+        # 4-BLOK: CHORAKLAR TAHLILI (KVARTAL)
         b4 = ctk.CTkFrame(bottom_frame, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#E2E8F0")
         b4.grid(row=0, column=3, padx=3, sticky="nsew")
-        ctk.CTkLabel(b4, text="📅 CHORAKLAR TAHLILI (KVARTAL)", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(6, 2))
+        ctk.CTkLabel(b4, text="📅 CHORAKLAR (KVARTAL)", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(4, 2))
+
+        q_frame = ctk.CTkFrame(b4, fg_color="transparent")
+        q_frame.pack(fill="x", padx=6, pady=2)
+
         q = stats['chorak_taqsimot']
-        ctk.CTkLabel(b4, text=f"I-ch: {q['I']} | II-ch: {q['II']} | III-ch: {q['III']} | IV-ch: {q['IV']}", font=ctk.CTkFont(size=12, weight="bold"), text_color="#1F4E79").pack(pady=1)
-        ctk.CTkLabel(b4, text="Yil davomidagi davriy dinamika", font=ctk.CTkFont(size=10, slant="italic"), text_color="#7F8C8D").pack(pady=(1, 6))
+        ctk.CTkButton(q_frame, text=f"I-ch: {q['I']}", width=50, height=24, fg_color="#F4F6F7", text_color="#1F4E79", hover_color="#E5E8E8", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(1)).pack(side="left", padx=2)
+        ctk.CTkButton(q_frame, text=f"II-ch: {q['II']}", width=50, height=24, fg_color="#F4F6F7", text_color="#1F4E79", hover_color="#E5E8E8", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(2)).pack(side="left", padx=2)
+        ctk.CTkButton(q_frame, text=f"III-ch: {q['III']}", width=55, height=24, fg_color="#D4E6F1", text_color="#1F4E79", hover_color="#A9CCE3", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(3)).pack(side="left", padx=2)
+        ctk.CTkButton(q_frame, text=f"IV-ch: {q['IV']}", width=50, height=24, fg_color="#F4F6F7", text_color="#1F4E79", hover_color="#E5E8E8", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(4)).pack(side="left", padx=2)
+
+        ctk.CTkLabel(b4, text="Chorakni tanlab arizalarni oching", font=ctk.CTkFont(size=9, slant="italic"), text_color="#7F8C8D").pack(pady=(0, 4))
 
         for col_idx in range(4):
             bottom_frame.grid_columnconfigure(col_idx, weight=1)
@@ -410,13 +466,11 @@ class DashboardApp(ctk.CTk):
         tb_j.configure(state="disabled")
         tb_j.pack(fill="x", padx=15, pady=(4, 8))
 
-        # Komplayens nazorat bo'limi
         action_frame = ctk.CTkFrame(main_scroll, fg_color="#F8FAFC", corner_radius=6, border_width=1, border_color="#CBD5E1")
         action_frame.pack(fill="x", padx=15, pady=(4, 10))
 
         ctk.CTkLabel(action_frame, text="⚙️ KOMPLAYENS NAZORAT, MAS’UL TAYINLASH VA O‘RGANISH NATIJASI:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#0F2537").pack(padx=15, pady=(6, 2), anchor="w")
 
-        # 1-qator: Mas'ul organ va TELEGRAM TUGMASI
         row_masul = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_masul.pack(fill="x", padx=15, pady=3)
 
@@ -430,7 +484,6 @@ class DashboardApp(ctk.CTk):
         cb_masul_item.set("Davlat kadastrlari palatasi hududiy komplayens xodimi" if 'palata' in cur_masul.lower() else "Kadastr agentligi hududiy komplayens xodimi")
         cb_masul_item.pack(side="left")
 
-        # Telegramga yuborish tugmasi
         def send_to_telegram():
             v_name = rec.get('Viloyat')
             m_org = cb_masul_item.get()
@@ -466,7 +519,6 @@ class DashboardApp(ctk.CTk):
         )
         btn_tg.pack(side="left", padx=10)
 
-        # 2-qator: Holati va Ko'rilgan chora turi
         row_status = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_status.pack(fill="x", padx=15, pady=3)
 
@@ -594,7 +646,6 @@ class DashboardApp(ctk.CTk):
 
         populate_x()
 
-        # Tahrirlash paneli
         edit_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6, border_width=1, border_color="#CBD5E1")
         edit_frame.pack(fill="x", padx=15, pady=(0, 12))
 
