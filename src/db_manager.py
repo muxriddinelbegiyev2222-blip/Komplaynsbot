@@ -31,7 +31,6 @@ class DatabaseManager:
                     javob TEXT,
                     javob_bergan TEXT,
                     javob_sanasi TEXT,
-                    kategoriya TEXT,
                     ijro_holati TEXT,
                     organish_natijasi TEXT DEFAULT '',
                     biriktirilgan_fayl TEXT DEFAULT '',
@@ -45,18 +44,17 @@ class DatabaseManager:
             cursor = conn.cursor()
             for _, row in df.iterrows():
                 m_id = int(row.get('#', 0))
+                # 1 dan 9 gacha bo'lgan test xabarlarni chiqarib tashlash
                 if m_id <= 9:
                     continue
 
                 cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
                 exists = cursor.fetchone()
 
-                # Boshlang'ich mas'ul organni yo'nalishdan kelib chiqib avtomat belgilash
+                # Markaziy apparatga tushganlarni ham to'liq tegishli hududiy organga biriktirish
                 y_str = str(row.get('Yoʻnalish', '')).lower()
                 if 'palata' in y_str:
                     default_masul = "Davlat kadastrlari palatasi hududiy komplayens xodimi"
-                elif 'markaziy apparat' in y_str:
-                    default_masul = "Agentlik markaziy apparati mas’ul xodimi"
                 else:
                     default_masul = "Kadastr agentligi hududiy komplayens xodimi"
 
@@ -65,8 +63,8 @@ class DatabaseManager:
                         INSERT INTO murojaatlar (
                             id, yaratilgan_sana, fish, telefon, viloyat, tuman,
                             yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan,
-                            javob_sanasi, kategoriya, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         m_id,
                         str(row.get('Yaratilgan sana', '')),
@@ -81,17 +79,21 @@ class DatabaseManager:
                         str(row.get('Javob', '')),
                         str(row.get('Javob bergan', '')),
                         str(row.get('Javob sanasi', '')),
-                        str(row.get('Kategoriya', '')),
                         'O‘rganishga yuborilgan',
                         '',
                         '',
                         default_masul
                     ))
                 else:
+                    # Mavjud bo'lsa yangilab, mas'ul organni to'g'rilab qo'yish
                     cursor.execute("""
                         UPDATE murojaatlar SET
                             holat = ?, javob = ?, javob_bergan = ?, javob_sanasi = ?,
-                            aniq_yonalish = ?, kategoriya = ?
+                            aniq_yonalish = ?,
+                            masul_komplayens = CASE 
+                                WHEN masul_komplayens LIKE '%palata%' THEN 'Davlat kadastrlari palatasi hududiy komplayens xodimi'
+                                ELSE 'Kadastr agentligi hududiy komplayens xodimi'
+                            END
                         WHERE id = ?
                     """, (
                         str(row.get('Holat', '')),
@@ -99,7 +101,6 @@ class DatabaseManager:
                         str(row.get('Javob bergan', '')),
                         str(row.get('Javob sanasi', '')),
                         str(row.get('Aniq_Yonalish', '')),
-                        str(row.get('Kategoriya', '')),
                         m_id
                     ))
             conn.commit()
@@ -131,7 +132,6 @@ class DatabaseManager:
                 'javob': 'Javob',
                 'javob_bergan': 'Javob bergan',
                 'javob_sanasi': 'Javob sanasi',
-                'kategoriya': 'Kategoriya',
                 'ijro_holati': 'Ijro_Holati',
                 'organish_natijasi': 'Organish_Natijasi',
                 'biriktirilgan_fayl': 'Biriktirilgan_Fayl',
