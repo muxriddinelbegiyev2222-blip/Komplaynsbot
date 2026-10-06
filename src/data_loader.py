@@ -21,6 +21,7 @@ class DataLoader:
         raw_df = pd.read_excel(file_path)
         raw_df.columns = [col.strip() for col in raw_df.columns]
         
+        # 1 dan 9 gacha bo'lgan test xabarlarini butunlay chiqarib tashlash
         if '#' in raw_df.columns:
             raw_df = raw_df[raw_df['#'] > 9]
 
@@ -47,22 +48,9 @@ class DataLoader:
                 return 'Davlat kadastrlari palatasi hududiy boshqarmasi'
             return 'Boshqa tizim tashkiloti'
 
-        corruption_words = [
-            'pora', 'tamagir', 'ta’magir', 'тамагир', 'таъмагир', 'порахоʻр', 'порахор',
-            'korup', 'корруп', 'каруп', 'karup', 'pul talab', 'пул талаб', 
-            'pora olish', 'pora berish', 'suiiste', 'суиисте'
-        ]
-
-        def get_cat(row):
-            matn = str(row.get('Murojaat matni', '')).lower()
-            if any(w in matn for w in corruption_words):
-                return 'Korrupsiyaga oid'
-            return 'Sohaviy/Umumiy'
-
         df['Aniq_Yonalish'] = df['Yoʻnalish'].apply(get_exact_yonalish)
-        df['Kategoriya'] = df.apply(get_cat, axis=1)
 
-    def filter_data(self, period='Barchasi', yonalish='Barchasi', category='Barchasi', masul='Barchasi'):
+    def filter_data(self, period='Barchasi', yonalish='Barchasi', masul='Barchasi'):
         temp = self.df.copy()
         if temp.empty:
             self.filtered_df = temp
@@ -81,11 +69,6 @@ class DataLoader:
         if yonalish != 'Barchasi':
             temp = temp[temp['Aniq_Yonalish'] == yonalish]
 
-        if category == 'Korrupsiyaga oid':
-            temp = temp[temp['Kategoriya'] == 'Korrupsiyaga oid']
-        elif category == 'Sohaviy/Umumiy':
-            temp = temp[temp['Kategoriya'] == 'Sohaviy/Umumiy']
-
         if masul != 'Barchasi':
             temp = temp[temp['Masul_Komplayens'] == masul]
 
@@ -97,25 +80,22 @@ class DataLoader:
         total = len(d)
         if total == 0:
             return {
-                "total": 0, "korrupsiya": 0, 
-                "agentlik_organish": 0, "palata_organish": 0, 
-                "natija_kiritilgan": 0, "asossiz": 0
+                "total": 0,
+                "agentlik_organish": 0,
+                "palata_organish": 0,
+                "natija_kiritilgan": 0,
+                "asossiz": 0
             }
 
-        korrupsiya_count = len(d[d['Kategoriya'] == 'Korrupsiyaga oid'])
-        
-        # Agentlik va Palata komplayenslarida alohida o'rganishda turganlar
         is_organish = d['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)
         agentlik_org = len(d[is_organish & d['Masul_Komplayens'].astype(str).str.contains("agentligi", case=False, na=False)])
         palata_org = len(d[is_organish & d['Masul_Komplayens'].astype(str).str.contains("palata", case=False, na=False)])
 
-        # Natijasi o'rganib chiqilganlar
         natija_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora|O‘rganib chiqildi", case=False, na=False)])
         asossiz_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Asossiz", case=False, na=False)])
 
         return {
             "total": total,
-            "korrupsiya": korrupsiya_count,
             "agentlik_organish": agentlik_org,
             "palata_organish": palata_org,
             "natija_kiritilgan": natija_count,
