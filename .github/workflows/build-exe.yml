@@ -10,25 +10,32 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Repozitoriyni yuklash
+      - name: Клонирование репозитория
         uses: actions/checkout@v4
 
-      - name: Python-ni o'rnatish
+      - name: Установка Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Kutubxonalarni o'rnatish
+      - name: Установка зависимостей
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: EXE dasturini yig'ish (Build)
+      - name: Сборка EXE с явным включением модулей
         run: |
-          pyinstaller --noconsole --onefile --collect-all customtkinter --name="Korrupsiya_Monitoring" main.py
+          pyinstaller --noconsole --onefile `
+            --collect-all customtkinter `
+            --collect-all pandas `
+            --collect-all openpyxl `
+            --hidden-import=pandas `
+            --hidden-import=openpyxl `
+            --hidden-import=PIL `
+            --name="Korrupsiya_Monitoring" main.py
 
-      - name: Tayyor EXE faylni yuklab olish uchun saqlash (Artifacts)
+      - name: Сохранение готового EXE
         uses: actions/upload-artifact@v4
         with:
           name: Korrupsiya_Monitoring_EXE
