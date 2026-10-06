@@ -21,7 +21,6 @@ class DataLoader:
         raw_df = pd.read_excel(file_path)
         raw_df.columns = [col.strip() for col in raw_df.columns]
         
-        # 1 dan 9 gacha bo'lgan test xabarlarini butunlay chiqarib tashlash
         if '#' in raw_df.columns:
             raw_df = raw_df[raw_df['#'] > 9]
 
@@ -63,13 +62,12 @@ class DataLoader:
         df['Aniq_Yonalish'] = df['Yoʻnalish'].apply(get_exact_yonalish)
         df['Kategoriya'] = df.apply(get_cat, axis=1)
 
-    def filter_data(self, period='Barchasi', yonalish='Barchasi', category='Barchasi'):
+    def filter_data(self, period='Barchasi', yonalish='Barchasi', category='Barchasi', masul='Barchasi'):
         temp = self.df.copy()
         if temp.empty:
             self.filtered_df = temp
             return temp
 
-        # Vaqt filtri
         if 'DT' in temp.columns and temp['DT'].notnull().any():
             max_date = temp['DT'].max()
             if period == 'Joriy hafta':
@@ -80,15 +78,16 @@ class DataLoader:
             elif period == 'Joriy yil':
                 temp = temp[temp['DT'].dt.year == max_date.year]
 
-        # Yo'nalish filtri
         if yonalish != 'Barchasi':
             temp = temp[temp['Aniq_Yonalish'] == yonalish]
 
-        # Kategoriya filtri
         if category == 'Korrupsiyaga oid':
             temp = temp[temp['Kategoriya'] == 'Korrupsiyaga oid']
         elif category == 'Sohaviy/Umumiy':
             temp = temp[temp['Kategoriya'] == 'Sohaviy/Umumiy']
+
+        if masul != 'Barchasi':
+            temp = temp[temp['Masul_Komplayens'] == masul]
 
         self.filtered_df = temp
         return temp
@@ -97,23 +96,28 @@ class DataLoader:
         d = self.filtered_df
         total = len(d)
         if total == 0:
-            return {"total": 0, "korrupsiya": 0, "organishda": 0, "natija_kiritilgan": 0, "asossiz": 0}
+            return {
+                "total": 0, "korrupsiya": 0, 
+                "agentlik_organish": 0, "palata_organish": 0, 
+                "natija_kiritilgan": 0, "asossiz": 0
+            }
 
         korrupsiya_count = len(d[d['Kategoriya'] == 'Korrupsiyaga oid'])
         
-        # O'rganishda turganlar
-        organishda_count = len(d[d['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)])
-        
-        # Natijasi kiritilgan (Bartaraf etilgan yoki chora ko'rilgan)
-        natija_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora", case=False, na=False)])
-        
-        # Asossiz deb topilgan
+        # Agentlik va Palata komplayenslarida alohida o'rganishda turganlar
+        is_organish = d['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)
+        agentlik_org = len(d[is_organish & d['Masul_Komplayens'].astype(str).str.contains("agentligi", case=False, na=False)])
+        palata_org = len(d[is_organish & d['Masul_Komplayens'].astype(str).str.contains("palata", case=False, na=False)])
+
+        # Natijasi o'rganib chiqilganlar
+        natija_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora|O‘rganib chiqildi", case=False, na=False)])
         asossiz_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Asossiz", case=False, na=False)])
 
         return {
             "total": total,
             "korrupsiya": korrupsiya_count,
-            "organishda": organishda_count,
+            "agentlik_organish": agentlik_org,
+            "palata_organish": palata_org,
             "natija_kiritilgan": natija_count,
             "asossiz": asossiz_count
         }
