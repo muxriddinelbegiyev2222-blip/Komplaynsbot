@@ -10,11 +10,26 @@ class ReportGenerator:
     @staticmethod
     def export_excel(df, file_path):
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
-            export_cols = ['#', 'Yaratilgan sana', 'F.I.Sh.', 'Telefon', 'Viloyat', 'Tuman', 'Yoʻnalish', 'Kategoriya', 'Ijro_Holati', 'Murojaat matni', 'Organish_Natijasi']
+            export_cols = [
+                '#', 'Yaratilgan sana', 'F.I.Sh.', 'Telefon', 'Viloyat', 'Tuman', 
+                'Yoʻnalish', 'Kategoriya', 'Masul_Komplayens', 'Ijro_Holati', 
+                'Organish_Natijasi', 'Murojaat matni'
+            ]
             available = [c for c in export_cols if c in df.columns]
             sub_df = df[available].copy()
-            sub_df.to_excel(writer, sheet_name="Murojaatlar", index=False)
-            ws = writer.sheets["Murojaatlar"]
+
+            # Ustunlarga rasmiy o'zbekcha nom berish
+            col_rename = {
+                '#': 'T/r',
+                'Yaratilgan sana': 'Kelib tushgan sana',
+                'Masul_Komplayens': 'Mas’ul komplayens organi',
+                'Ijro_Holati': 'Ijro holati',
+                'Organish_Natijasi': 'O‘rganish natijasi va ko‘rilgan chora',
+                'Murojaat matni': 'Murojaat mazmuni'
+            }
+            sub_df = sub_df.rename(columns=col_rename)
+            sub_df.to_excel(writer, sheet_name="Murojaatlar_Reyestri", index=False)
+            ws = writer.sheets["Murojaatlar_Reyestri"]
             ws.views.sheetView[0].showGridLines = True
 
             navy_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
@@ -26,7 +41,7 @@ class ReportGenerator:
                 bottom=Side(style='thin', color='D9D9D9')
             )
 
-            ws.row_dimensions[1].height = 28
+            ws.row_dimensions[1].height = 30
             for col_num in range(1, len(available) + 1):
                 cell = ws.cell(row=1, column=col_num)
                 cell.fill = navy_fill
@@ -35,7 +50,7 @@ class ReportGenerator:
                 cell.border = thin_border
 
             for r_idx in range(2, len(sub_df) + 2):
-                ws.row_dimensions[r_idx].height = 24
+                ws.row_dimensions[r_idx].height = 26
                 is_even = (r_idx % 2 == 0)
                 for c_idx in range(1, len(available) + 1):
                     cell = ws.cell(row=r_idx, column=c_idx)
@@ -45,16 +60,20 @@ class ReportGenerator:
                         cell.fill = zebra_fill
                     cell.alignment = Alignment(vertical="center", wrap_text=True)
 
-            for c_idx, col_name in enumerate(available, 1):
+            for c_idx, col_name in enumerate(sub_df.columns, 1):
                 col_letter = get_column_letter(c_idx)
-                if col_name in ['#']:
-                    ws.column_dimensions[col_letter].width = 7
-                elif col_name in ['Telefon', 'Ijro_Holati', 'Kategoriya']:
-                    ws.column_dimensions[col_letter].width = 16
-                elif col_name in ['Yaratilgan sana', 'F.I.Sh.', 'Viloyat', 'Tuman']:
+                if col_name in ['T/r']:
+                    ws.column_dimensions[col_letter].width = 8
+                elif col_name in ['Telefon', 'Ijro holati']:
+                    ws.column_dimensions[col_letter].width = 18
+                elif col_name in ['Kelib tushgan sana', 'F.I.Sh.', 'Viloyat', 'Tuman']:
                     ws.column_dimensions[col_letter].width = 22
+                elif col_name in ['Mas’ul komplayens organi']:
+                    ws.column_dimensions[col_letter].width = 32
+                elif col_name in ['O‘rganish natijasi va ko‘rilgan chora']:
+                    ws.column_dimensions[col_letter].width = 38
                 else:
-                    ws.column_dimensions[col_letter].width = 40
+                    ws.column_dimensions[col_letter].width = 45
 
     @staticmethod
     def export_word_report(stats, reg_stats, file_path, period_name="Barcha davr"):
@@ -84,8 +103,8 @@ class ReportGenerator:
         p_body.paragraph_format.line_spacing = 1.25
         p_body.add_run(
             f"Kadastr tizimi korrupsiyaga qarshi kurashish rasmiy Telegram boti orqali "
-            f"hisobot davrida jami {stats['total']} ta murojaat kelib tushgan (sinov va test xabarlari chiqarib tashlangan holda). "
-            f"Ushbu murojaatlarning mazmuni va ijrosi quyidagicha taqsimlangan:\n"
+            f"hisobot davrida jami {stats['total']} ta murojaat kelib tushgan. "
+            f"Ushbu murojaatlarning hududiy komplayens xodimlari tomonidan o‘rganilishi va ijro holati quyidagicha:\n"
         )
 
         table = doc.add_table(rows=1, cols=3)
@@ -96,11 +115,12 @@ class ReportGenerator:
         hdr_cells[2].text = "Soni (ta)"
 
         data_rows = [
-            ("1", "Jami haqiqiy murojaatlar", str(stats['total'])),
+            ("1", "Jami ko‘rib chiqilayotgan murojaatlar", str(stats['total'])),
             ("2", "Korrupsiya va ta’magirlik alomatlari keltirilgan", str(stats['korrupsiya'])),
-            ("3", "Hududiy bo'linmalarda o‘rganishda bo‘lgan murojaatlar", str(stats['organishda'])),
-            ("4", "Natijasi kiritilgan (bartaraf etilgan / chora ko'rilgan)", str(stats['natija_kiritilgan'])),
-            ("5", "O'rganish natijasida asossiz deb topilgan", str(stats['asossiz']))
+            ("3", "Agentlik hududiy komplayens xodimlarida o‘rganishda", str(stats['agentlik_organish'])),
+            ("4", "Palata hududiy komplayens xodimlarida o‘rganishda", str(stats['palata_organish'])),
+            ("5", "O‘rganib chiqilgan (bartaraf etilgan / chora ko‘rilgan)", str(stats['natija_kiritilgan'])),
+            ("6", "O‘rganish natijasida asossiz deb topilgan", str(stats['asossiz']))
         ]
 
         for row in data_rows:
@@ -111,7 +131,7 @@ class ReportGenerator:
 
         doc.add_paragraph("\n")
         p_reg = doc.add_paragraph()
-        p_reg.add_run("Eng ko‘p murojaat qayd etilgan hududlar:\n").bold = True
+        p_reg.add_run("Eng ko‘p murojaat kelib tushgan hududlar:\n").bold = True
         for reg, cnt in reg_stats.head(5).items():
             p_reg.add_run(f"• {reg}: {cnt} ta murojaat\n")
 
