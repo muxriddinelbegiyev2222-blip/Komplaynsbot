@@ -12,13 +12,12 @@ class ReportGenerator:
         with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
             export_cols = [
                 '#', 'Yaratilgan sana', 'F.I.Sh.', 'Telefon', 'Viloyat', 'Tuman', 
-                'Yoʻnalish', 'Kategoriya', 'Masul_Komplayens', 'Ijro_Holati', 
+                'Yoʻnalish', 'Masul_Komplayens', 'Ijro_Holati', 
                 'Organish_Natijasi', 'Murojaat matni'
             ]
             available = [c for c in export_cols if c in df.columns]
             sub_df = df[available].copy()
 
-            # Ustunlarga rasmiy o'zbekcha nom berish
             col_rename = {
                 '#': 'T/r',
                 'Yaratilgan sana': 'Kelib tushgan sana',
@@ -35,14 +34,14 @@ class ReportGenerator:
             navy_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
             zebra_fill = PatternFill(start_color="F7F9FC", end_color="F7F9FC", fill_type="solid")
             thin_border = Border(
-                left=Side(style='thin', color='D9D9D9'),
-                right=Side(style='thin', color='D9D9D9'),
-                top=Side(style='thin', color='D9D9D9'),
-                bottom=Side(style='thin', color='D9D9D9')
+                left=Side(style='thin', color='B0C4DE'),
+                right=Side(style='thin', color='B0C4DE'),
+                top=Side(style='thin', color='B0C4DE'),
+                bottom=Side(style='thin', color='B0C4DE')
             )
 
             ws.row_dimensions[1].height = 30
-            for col_num in range(1, len(available) + 1):
+            for col_num in range(1, len(sub_df.columns) + 1):
                 cell = ws.cell(row=1, column=col_num)
                 cell.fill = navy_fill
                 cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
@@ -52,7 +51,7 @@ class ReportGenerator:
             for r_idx in range(2, len(sub_df) + 2):
                 ws.row_dimensions[r_idx].height = 26
                 is_even = (r_idx % 2 == 0)
-                for c_idx in range(1, len(available) + 1):
+                for c_idx in range(1, len(sub_df.columns) + 1):
                     cell = ws.cell(row=r_idx, column=c_idx)
                     cell.font = Font(name="Calibri", size=10)
                     cell.border = thin_border
@@ -69,9 +68,9 @@ class ReportGenerator:
                 elif col_name in ['Kelib tushgan sana', 'F.I.Sh.', 'Viloyat', 'Tuman']:
                     ws.column_dimensions[col_letter].width = 22
                 elif col_name in ['Mas’ul komplayens organi']:
-                    ws.column_dimensions[col_letter].width = 32
+                    ws.column_dimensions[col_letter].width = 34
                 elif col_name in ['O‘rganish natijasi va ko‘rilgan chora']:
-                    ws.column_dimensions[col_letter].width = 38
+                    ws.column_dimensions[col_letter].width = 40
                 else:
                     ws.column_dimensions[col_letter].width = 45
 
@@ -102,13 +101,13 @@ class ReportGenerator:
         p_body = doc.add_paragraph()
         p_body.paragraph_format.line_spacing = 1.25
         p_body.add_run(
-            f"Kadastr tizimi korrupsiyaga qarshi kurashish rasmiy Telegram boti orqali "
+            f"Kadastr tizimi rasmiy Telegram boti orqali "
             f"hisobot davrida jami {stats['total']} ta murojaat kelib tushgan. "
             f"Ushbu murojaatlarning hududiy komplayens xodimlari tomonidan o‘rganilishi va ijro holati quyidagicha:\n"
         )
 
         table = doc.add_table(rows=1, cols=3)
-        table.style = 'Light Shading Accent 1'
+        table.style = 'Table Grid'
         hdr_cells = table.rows[0].cells
         hdr_cells[0].text = "T/r"
         hdr_cells[1].text = "Ko‘rsatkich nomi"
@@ -116,11 +115,10 @@ class ReportGenerator:
 
         data_rows = [
             ("1", "Jami ko‘rib chiqilayotgan murojaatlar", str(stats['total'])),
-            ("2", "Korrupsiya va ta’magirlik alomatlari keltirilgan", str(stats['korrupsiya'])),
-            ("3", "Agentlik hududiy komplayens xodimlarida o‘rganishda", str(stats['agentlik_organish'])),
-            ("4", "Palata hududiy komplayens xodimlarida o‘rganishda", str(stats['palata_organish'])),
-            ("5", "O‘rganib chiqilgan (bartaraf etilgan / chora ko‘rilgan)", str(stats['natija_kiritilgan'])),
-            ("6", "O‘rganish natijasida asossiz deb topilgan", str(stats['asossiz']))
+            ("2", "Agentlik hududiy komplayens xodimlarida o‘rganishda", str(stats['agentlik_organish'])),
+            ("3", "Palata hududiy komplayens xodimlarida o‘rganishda", str(stats['palata_organish'])),
+            ("4", "O‘rganib chiqilgan (bartaraf etilgan / chora ko‘rilgan)", str(stats['natija_kiritilgan'])),
+            ("5", "O‘rganish natijasida asossiz deb topilgan", str(stats['asossiz']))
         ]
 
         for row in data_rows:
