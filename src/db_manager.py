@@ -33,7 +33,8 @@ class DatabaseManager:
                     javob_sanasi TEXT,
                     kategoriya TEXT,
                     ijro_holati TEXT,
-                    organish_natijasi TEXT DEFAULT ''
+                    organish_natijasi TEXT DEFAULT '',
+                    biriktirilgan_fayl TEXT DEFAULT ''
                 )
             """)
             conn.commit()
@@ -43,7 +44,7 @@ class DatabaseManager:
             cursor = conn.cursor()
             for _, row in df.iterrows():
                 m_id = int(row.get('#', 0))
-                # 1 dan 9 gacha bo'lgan test xabarlarni bazaga umuman kiritmaymiz
+                # 1 dan 9 gacha bo'lgan test xabarlarni umuman bazaga kiritmaymiz
                 if m_id <= 9:
                     continue
 
@@ -55,8 +56,8 @@ class DatabaseManager:
                         INSERT INTO murojaatlar (
                             id, yaratilgan_sana, fish, telefon, viloyat, tuman,
                             yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan,
-                            javob_sanasi, kategoriya, ijro_holati, organish_natijasi
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            javob_sanasi, kategoriya, ijro_holati, organish_natijasi, biriktirilgan_fayl
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         m_id,
                         str(row.get('Yaratilgan sana', '')),
@@ -73,6 +74,7 @@ class DatabaseManager:
                         str(row.get('Javob sanasi', '')),
                         str(row.get('Kategoriya', '')),
                         'O‘rganishga yuborilgan',
+                        '',
                         ''
                     ))
                 else:
@@ -92,14 +94,14 @@ class DatabaseManager:
                     ))
             conn.commit()
 
-    def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi):
+    def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi, biriktirilgan_fayl=''):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE murojaatlar 
-                SET ijro_holati = ?, organish_natijasi = ?
+                SET ijro_holati = ?, organish_natijasi = ?, biriktirilgan_fayl = ?
                 WHERE id = ?
-            """, (ijro_holati, organish_natijasi, m_id))
+            """, (ijro_holati, organish_natijasi, biriktirilgan_fayl, m_id))
             conn.commit()
 
     def get_all_records(self):
@@ -121,6 +123,7 @@ class DatabaseManager:
                 'javob_sanasi': 'Javob sanasi',
                 'kategoriya': 'Kategoriya',
                 'ijro_holati': 'Ijro_Holati',
-                'organish_natijasi': 'Organish_Natijasi'
+                'organish_natijasi': 'Organish_Natijasi',
+                'biriktirilgan_fayl': 'Biriktirilgan_Fayl'
             })
             return df
