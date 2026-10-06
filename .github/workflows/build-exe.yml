@@ -18,14 +18,30 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Kutubxonalarni to'liq o'rnatish
+      - name: Barcha kerakli kutubxonalarni o'rnatish
         run: |
           python -m pip install --upgrade pip
           pip install pandas openpyxl customtkinter matplotlib pillow python-docx pyinstaller
 
-      - name: EXE dasturini to'liq yig'ish
+      - name: Rasmiy idoraviy nishon va logotipni hosil qilish
         run: |
-          pyinstaller --noconsole --onefile --copy-metadata pandas --hidden-import=pandas --hidden-import=openpyxl --hidden-import=PIL --hidden-import=docx --collect-all customtkinter --collect-all pandas --collect-all openpyxl --collect-all docx --name="Korrupsiya_Monitoring" main.py
+          python create_icon.py
+
+      - name: EXE dasturini maxsus logo-icon bilan yig'ish
+        run: |
+          pyinstaller --noconsole --onefile `
+            --icon="assets/app_icon.ico" `
+            --add-data "assets;assets" `
+            --copy-metadata pandas `
+            --hidden-import=pandas `
+            --hidden-import=openpyxl `
+            --hidden-import=PIL `
+            --hidden-import=docx `
+            --collect-all customtkinter `
+            --collect-all pandas `
+            --collect-all openpyxl `
+            --collect-all docx `
+            --name="Korrupsiya_Monitoring" main.py
 
       - name: Tayyor EXE faylni saqlash
         uses: actions/upload-artifact@v4
