@@ -31,7 +31,6 @@ class DataLoader:
         self.filtered_df = self.df.copy()
 
     def _classify(self, df):
-        # 1. Botdagi 5 ta yo'nalishni aniq belgilash
         def get_exact_yonalish(val):
             s = str(val).strip()
             if 'markaziy apparati' in s and 'Kadastr agentligi' in s:
@@ -44,11 +43,9 @@ class DataLoader:
                 return 'Davlat kadastrlari palatasi hududiy boshqarmasi'
             return 'Boshqa tizim tashkiloti'
 
-        # 2. 1097 ga yo'naltirilganlik (Javob matnida 1097 mavjudligi)
         def check_1097(val):
             return 1 if '1097' in str(val) else 0
 
-        # 3. Haqiqiy korrupsiya alomati (Murojaat matnidagi kalit so'zlar)
         corruption_words = [
             'pora', 'tamagir', 'ta’magir', 'тамагир', 'таъмагир', 'порахоʻр', 'порахор',
             'korup', 'корруп', 'каруп', 'karup', 'pul talab', 'пул талаб', 
@@ -59,7 +56,6 @@ class DataLoader:
         def get_cat(row):
             matn = str(row.get('Murojaat matni', '')).lower()
             name = str(row.get('F.I.Sh.', '')).lower()
-            
             if any(w in matn for w in test_words) or any(w in name for w in ['test', 'nnn', 'ааа']):
                 return 'Test/Texnik'
             elif any(w in matn for w in corruption_words):
@@ -78,9 +74,8 @@ class DataLoader:
             self.filtered_df = temp
             return temp
 
-        # Vaqt filtri (Sana bo'yicha aniq qirqish)
         if 'DT' in temp.columns and temp['DT'].notnull().any():
-            max_date = temp['DT'].max() # Bazadagi eng oxirgi kunga nisbatan
+            max_date = temp['DT'].max()
             if period == 'Joriy hafta':
                 start_week = max_date - timedelta(days=7)
                 temp = temp[temp['DT'] >= start_week]
@@ -89,11 +84,9 @@ class DataLoader:
             elif period == 'Joriy yil':
                 temp = temp[temp['DT'].dt.year == max_date.year]
 
-        # Yo'nalish filtri (Botingizdagi ro'yxat bo'yicha)
         if yonalish != 'Barchasi':
             temp = temp[temp['Aniq_Yonalish'] == yonalish]
 
-        # Kategoriya filtri
         if category == 'Korrupsiyaga oid':
             temp = temp[temp['Kategoriya'] == 'Korrupsiyaga oid']
         elif category == '1097 ga yo‘naltirilgan':
@@ -112,8 +105,8 @@ class DataLoader:
 
         korrupsiya_count = len(d[d['Kategoriya'] == 'Korrupsiyaga oid'])
         sent_1097_count = len(d[d['is_1097'] == 1])
-        organishda_count = len(d[d['Ijro_Holati'].astype(str).str.contains("O'rganishda|Yangi", case=False, na=False)])
-        bartaraf_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Bartaraf|Ijobiy|Chora|Javob berilgan", case=False, na=False)])
+        organishda_count = len(d[d['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)])
+        bartaraf_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora", case=False, na=False)])
 
         return {
             "total": total,
