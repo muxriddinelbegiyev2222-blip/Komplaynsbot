@@ -1,6 +1,8 @@
 import sqlite3
 import pandas as pd
 import os
+import shutil
+from datetime import datetime
 
 class DatabaseManager:
     def __init__(self, db_path=None):
@@ -9,13 +11,28 @@ class DatabaseManager:
             db_path = os.path.join("data", "murojaatlar.db")
         self.db_path = db_path
         self._init_db()
+        self._auto_backup()
 
     def _get_connection(self):
         return sqlite3.connect(self.db_path)
 
+    def _auto_backup(self):
+        """Bazani avtomatik zaxiralash (Auto-backup)"""
+        try:
+            if os.path.exists(self.db_path):
+                backup_dir = os.path.join("data", "backup")
+                os.makedirs(backup_dir, exist_ok=True)
+                today_str = datetime.now().strftime("%Y_%m_%d")
+                b_path = os.path.join(backup_dir, f"murojaatlar_{today_str}.db")
+                if not os.path.exists(b_path):
+                    shutil.copy2(self.db_path, b_path)
+        except Exception:
+            pass
+
     def _init_db(self):
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            # Murojaatlar jadvali
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS murojaatlar (
                     id INTEGER PRIMARY KEY,
@@ -34,9 +51,38 @@ class DatabaseManager:
                     ijro_holati TEXT,
                     organish_natijasi TEXT DEFAULT '',
                     biriktirilgan_fayl TEXT DEFAULT '',
-                    masul_komplayens TEXT DEFAULT ''
+                    masul_komplayens TEXT DEFAULT '',
+                    chora_turi TEXT DEFAULT 'Chora ko‘rilmagan'
                 )
             """)
+
+            # Hududiy komplayens xodimlari ma'lumotnomasi
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS xodimlar (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    viloyat TEXT,
+                    tashkilot_turi TEXT,
+                    fish TEXT,
+                    telefon TEXT,
+                    telegram_username TEXT
+                )
+            """)
+
+            # Standart hududlar bo'yicha boshlang'ich yozuvlarni kiritish
+            cursor.execute("SELECT COUNT(*) FROM xodimlar")
+            if cursor.fetchone()[0] == 0:
+                regions = [
+                    "Buxoro viloyati", "Farg'ona viloyati", "Jizzax viloyati", 
+                    "Namangan viloyati", "Navoiy viloyati", "Qashqadaryo viloyati", 
+                    "Qoraqalpog'iston Respublikasi", "Samarqand viloyati", "Sirdaryo viloyati", 
+                    "Surxondaryo viloyati", "Toshkent shahri", "Toshkent viloyati", "Xorazim viloyati"
+                ]
+                for reg in regions:
+                    cursor.execute("INSERT INTO xodimlar (viloyat, tashkilot_turi, fish, telefon, telegram_username) VALUES (?, ?, ?, ?, ?)",
+                                   (reg, "Kadastr agentligi", "Mas'ul xodim", "+998", ""))
+                    cursor.execute("INSERT INTO xodimlar (viloyat, tashkilot_turi, fish, telefon, telegram_username) VALUES (?, ?, ?, ?, ?)",
+                                   (reg, "Davlat kadastrlari palatasi", "Mas'ul xodim", "+998", ""))
+
             conn.commit()
 
     def sync_excel_data(self, df):
@@ -44,14 +90,12 @@ class DatabaseManager:
             cursor = conn.cursor()
             for _, row in df.iterrows():
                 m_id = int(row.get('#', 0))
-                # 1 dan 9 gacha bo'lgan test xabarlarni chiqarib tashlash
                 if m_id <= 9:
                     continue
 
                 cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
                 exists = cursor.fetchone()
 
-                # Markaziy apparatga tushganlarni ham to'liq tegishli hududiy organga biriktirish
                 y_str = str(row.get('Yoʻnalish', '')).lower()
                 if 'palata' in y_str:
                     default_masul = "Davlat kadastrlari palatasi hududiy komplayens xodimi"
@@ -63,8 +107,8 @@ class DatabaseManager:
                         INSERT INTO murojaatlar (
                             id, yaratilgan_sana, fish, telefon, viloyat, tuman,
                             yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan,
-                            javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         m_id,
                         str(row.get('Yaratilgan sana', '')),
@@ -80,20 +124,13 @@ class DatabaseManager:
                         str(row.get('Javob bergan', '')),
                         str(row.get('Javob sanasi', '')),
                         'O‘rganishga yuborilgan',
-                        '',
-                        '',
-                        default_masul
+                        '', '', default_masul, 'Chora ko‘rilmagan'
                     ))
                 else:
-                    # Mavjud bo'lsa yangilab, mas'ul organni to'g'rilab qo'yish
                     cursor.execute("""
                         UPDATE murojaatlar SET
                             holat = ?, javob = ?, javob_bergan = ?, javob_sanasi = ?,
-                            aniq_yonalish = ?,
-                            masul_komplayens = CASE 
-                                WHEN masul_komplayens LIKE '%palata%' THEN 'Davlat kadastrlari palatasi hududiy komplayens xodimi'
-                                ELSE 'Kadastr agentligi hududiy komplayens xodimi'
-                            END
+                            aniq_yonalish = ?
                         WHERE id = ?
                     """, (
                         str(row.get('Holat', '')),
@@ -105,14 +142,14 @@ class DatabaseManager:
                     ))
             conn.commit()
 
-    def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi, biriktirilgan_fayl='', masul_komplayens=''):
+    def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi, biriktirilgan_fayl='', masul_komplayens='', chora_turi='Chora ko‘rilmagan'):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE murojaatlar 
-                SET ijro_holati = ?, organish_natijasi = ?, biriktirilgan_fayl = ?, masul_komplayens = ?
+                SET ijro_holati = ?, organish_natijasi = ?, biriktirilgan_fayl = ?, masul_komplayens = ?, chora_turi = ?
                 WHERE id = ?
-            """, (ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, m_id))
+            """, (ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi, m_id))
             conn.commit()
 
     def get_all_records(self):
@@ -135,6 +172,31 @@ class DatabaseManager:
                 'ijro_holati': 'Ijro_Holati',
                 'organish_natijasi': 'Organish_Natijasi',
                 'biriktirilgan_fayl': 'Biriktirilgan_Fayl',
-                'masul_komplayens': 'Masul_Komplayens'
+                'masul_komplayens': 'Masul_Komplayens',
+                'chora_turi': 'Chora_Turi'
             })
             return df
+
+    def get_xodimlar(self):
+        with self._get_connection() as conn:
+            return pd.read_sql_query("SELECT * FROM xodimlar ORDER BY viloyat ASC, tashkilot_turi ASC", conn)
+
+    def save_xodim(self, x_id, fish, telefon, telegram_username):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE xodimlar 
+                SET fish = ?, telefon = ?, telegram_username = ?
+                WHERE id = ?
+            """, (fish, telefon, telegram_username, x_id))
+            conn.commit()
+
+    def find_xodim_for_region(self, viloyat, masul_str):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            t_type = "Davlat kadastrlari palatasi" if "palata" in str(masul_str).lower() else "Kadastr agentligi"
+            cursor.execute("SELECT fish, telefon, telegram_username FROM xodimlar WHERE viloyat = ? AND tashkilot_turi = ?", (viloyat, t_type))
+            row = cursor.fetchone()
+            if row:
+                return {"fish": row[0], "telefon": row[1], "username": row[2]}
+            return {"fish": "Noma'lum", "telefon": "", "username": ""}
