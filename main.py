@@ -1,41 +1,32 @@
 import os
 import sys
 
-# PyInstaller kutubxonalarni to'liq ko'rishi uchun majburiy importlar:
+# PyInstaller uchun majburiy importlar:
 import pandas as pd
 import openpyxl
 import customtkinter as ctk
 import matplotlib
 import PIL
+import docx
 
 from src.data_loader import DataLoader
 from src.ui_dashboard import DashboardApp
-from tkinter import filedialog, messagebox
+from tkinter import messagebox
 
 def main():
-    default_excel = os.path.join("data", "murojaatlar.xlsx")
-    excel_path = None
-    
-    if os.path.exists(default_excel):
-        excel_path = default_excel
-    else:
-        ctk.set_appearance_mode("System")
-        root = ctk.CTk()
-        root.withdraw()
-        messagebox.showinfo("Faylni tanlang", "Baza sifatida ishlatiladigan Excel (.xlsx) faylini tanlang.")
-        selected = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
-        root.destroy()
-        if selected:
-            excel_path = selected
-        else:
-            sys.exit(0)
-
     try:
-        loader = DataLoader(excel_path)
+        # Baza mavjud bo'lsa ochadi, bo'lmasa o'zi data/ ichida yaratadi
+        loader = DataLoader()
+        
+        # Agar dastlabki murojaatlar fayli bo'lsa uni yuklab oladi
+        default_file = os.path.join("data", "murojaatlar.xlsx")
+        if os.path.exists(default_file) and loader.df.empty:
+            loader.load_from_excel(default_file)
+
         app = DashboardApp(loader)
         app.mainloop()
     except Exception as e:
-        messagebox.showerror("Xatolik", f"Dasturni ishga tushirishda xatolik: {str(e)}")
+        messagebox.showerror("Xatolik", f"Dasturda kutilmagan xatolik: {str(e)}")
 
 if __name__ == "__main__":
     main()
