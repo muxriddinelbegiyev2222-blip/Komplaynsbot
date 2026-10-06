@@ -34,7 +34,8 @@ class DatabaseManager:
                     kategoriya TEXT,
                     ijro_holati TEXT,
                     organish_natijasi TEXT DEFAULT '',
-                    biriktirilgan_fayl TEXT DEFAULT ''
+                    biriktirilgan_fayl TEXT DEFAULT '',
+                    masul_komplayens TEXT DEFAULT ''
                 )
             """)
             conn.commit()
@@ -44,20 +45,28 @@ class DatabaseManager:
             cursor = conn.cursor()
             for _, row in df.iterrows():
                 m_id = int(row.get('#', 0))
-                # 1 dan 9 gacha bo'lgan test xabarlarni umuman bazaga kiritmaymiz
                 if m_id <= 9:
                     continue
 
                 cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
                 exists = cursor.fetchone()
 
+                # Boshlang'ich mas'ul organni yo'nalishdan kelib chiqib avtomat belgilash
+                y_str = str(row.get('Yoʻnalish', '')).lower()
+                if 'palata' in y_str:
+                    default_masul = "Davlat kadastrlari palatasi hududiy komplayens xodimi"
+                elif 'markaziy apparat' in y_str:
+                    default_masul = "Agentlik markaziy apparati mas’ul xodimi"
+                else:
+                    default_masul = "Kadastr agentligi hududiy komplayens xodimi"
+
                 if not exists:
                     cursor.execute("""
                         INSERT INTO murojaatlar (
                             id, yaratilgan_sana, fish, telefon, viloyat, tuman,
                             yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan,
-                            javob_sanasi, kategoriya, ijro_holati, organish_natijasi, biriktirilgan_fayl
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            javob_sanasi, kategoriya, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         m_id,
                         str(row.get('Yaratilgan sana', '')),
@@ -75,7 +84,8 @@ class DatabaseManager:
                         str(row.get('Kategoriya', '')),
                         'O‘rganishga yuborilgan',
                         '',
-                        ''
+                        '',
+                        default_masul
                     ))
                 else:
                     cursor.execute("""
@@ -94,14 +104,14 @@ class DatabaseManager:
                     ))
             conn.commit()
 
-    def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi, biriktirilgan_fayl=''):
+    def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi, biriktirilgan_fayl='', masul_komplayens=''):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE murojaatlar 
-                SET ijro_holati = ?, organish_natijasi = ?, biriktirilgan_fayl = ?
+                SET ijro_holati = ?, organish_natijasi = ?, biriktirilgan_fayl = ?, masul_komplayens = ?
                 WHERE id = ?
-            """, (ijro_holati, organish_natijasi, biriktirilgan_fayl, m_id))
+            """, (ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, m_id))
             conn.commit()
 
     def get_all_records(self):
@@ -124,6 +134,7 @@ class DatabaseManager:
                 'kategoriya': 'Kategoriya',
                 'ijro_holati': 'Ijro_Holati',
                 'organish_natijasi': 'Organish_Natijasi',
-                'biriktirilgan_fayl': 'Biriktirilgan_Fayl'
+                'biriktirilgan_fayl': 'Biriktirilgan_Fayl',
+                'masul_komplayens': 'Masul_Komplayens'
             })
             return df
