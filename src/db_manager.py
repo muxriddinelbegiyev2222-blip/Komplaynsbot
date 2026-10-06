@@ -33,8 +33,8 @@ class DatabaseManager:
                     javob_sanasi TEXT,
                     kategoriya TEXT,
                     is_1097 INTEGER,
-                    ijro_holati TEXT DEFAULT 'Javob berilgan',
-                    chora_mazmuni TEXT DEFAULT ''
+                    ijro_holati TEXT,
+                    organish_natijasi TEXT DEFAULT ''
                 )
             """)
             conn.commit()
@@ -47,12 +47,15 @@ class DatabaseManager:
                 cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
                 exists = cursor.fetchone()
 
+                is_1097_val = int(row.get('is_1097', 0))
+                default_status = "1097 ga yo‘naltirilgan" if is_1097_val == 1 else "O‘rganishga yuborilgan"
+
                 if not exists:
                     cursor.execute("""
                         INSERT INTO murojaatlar (
                             id, yaratilgan_sana, fish, telefon, viloyat, tuman,
                             yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan,
-                            javob_sanasi, kategoriya, is_1097, ijro_holati, chora_mazmuni
+                            javob_sanasi, kategoriya, is_1097, ijro_holati, organish_natijasi
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         m_id,
@@ -69,8 +72,8 @@ class DatabaseManager:
                         str(row.get('Javob bergan', '')),
                         str(row.get('Javob sanasi', '')),
                         str(row.get('Kategoriya', '')),
-                        int(row.get('is_1097', 0)),
-                        'Javob berilgan',
+                        is_1097_val,
+                        default_status,
                         ''
                     ))
                 else:
@@ -86,19 +89,19 @@ class DatabaseManager:
                         str(row.get('Javob sanasi', '')),
                         str(row.get('Aniq_Yonalish', '')),
                         str(row.get('Kategoriya', '')),
-                        int(row.get('is_1097', 0)),
+                        is_1097_val,
                         m_id
                     ))
             conn.commit()
 
-    def update_murojaat_ijro(self, m_id, ijro_holati, chora_mazmuni):
+    def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 UPDATE murojaatlar 
-                SET ijro_holati = ?, chora_mazmuni = ?
+                SET ijro_holati = ?, organish_natijasi = ?
                 WHERE id = ?
-            """, (ijro_holati, chora_mazmuni, m_id))
+            """, (ijro_holati, organish_natijasi, m_id))
             conn.commit()
 
     def get_all_records(self):
@@ -120,6 +123,6 @@ class DatabaseManager:
                 'javob_sanasi': 'Javob sanasi',
                 'kategoriya': 'Kategoriya',
                 'ijro_holati': 'Ijro_Holati',
-                'chora_mazmuni': 'Chora_Mazmuni'
+                'organish_natijasi': 'Organish_Natijasi'
             })
             return df
