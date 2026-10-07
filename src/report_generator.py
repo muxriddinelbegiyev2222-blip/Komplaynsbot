@@ -1,170 +1,315 @@
-import pandas as pd
 import os
-from datetime import datetime, timedelta
-from src.db_manager import DatabaseManager
+import pandas as pd
+from datetime import datetime
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
-class DataLoader:
-    def __init__(self, excel_path=None):
-        self.db = DatabaseManager()
-        self.df = pd.DataFrame()
-        self.filtered_df = pd.DataFrame()
+try:
+    from docx import Document
+    from docx.shared import Inches, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    HAS_DOCX = True
+except ImportError:
+    HAS_DOCX = False
+
+class ReportGenerator:
+    @staticmethod
+    def generate_task_document(rec, output_path):
+        """Hududiy komplayens xodimiga rasmiy Word Topshiriq Xati yaratish"""
+        if not HAS_DOCX:
+            return None
+
+        doc = Document()
+        section = doc.sections[0]
+        section.top_margin = Inches(0.8)
+        section.bottom_margin = Inches(0.8)
+        section.left_margin = Inches(1.0)
+        section.right_margin = Inches(0.8)
+
+        p_h = doc.add_paragraph()
+        p_h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r1 = p_h.add_run("O‘ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI\n")
+        r1.bold = True
+        r1.font.name = 'Times New Roman'
+        r1.font.size = Pt(13)
+
+        r2 = p_h.add_run("KORRUPSIYAGA QARSHI KURASHISH BO‘LIMI\n")
+        r2.bold = True
+        r2.font.name = 'Times New Roman'
+        r2.font.size = Pt(12)
+
+        r_tel = p_h.add_run("Ishonch telefoni: +998-71-273-19-66\n\n")
+        r_tel.font.name = 'Times New Roman'
+        r_tel.font.size = Pt(10)
+        r_tel.italic = True
+
+        r_title = p_h.add_run(f"KOMPLAYENS O‘RGANISH TOPSHIRIQLAR XATI № {rec.get('#')}\n")
+        r_title.bold = True
+        r_title.font.name = 'Times New Roman'
+        r_title.font.size = Pt(14)
+        r_title.font.color.rgb = RGBColor(15, 37, 55)
+
+        table = doc.add_table(rows=7, cols=2)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.style = 'Table Grid'
+
+        rows_data = [
+            ("Murojaat tartib raqami:", f"#{rec.get('#')}"),
+            ("Kelib tushgan sana:", str(rec.get('Yaratilgan sana'))),
+            ("Murojaat manbasi:", str(rec.get('Manba', 'Telegram bot'))),
+            ("Fuqaro (F.I.Sh.):", str(rec.get('F.I.Sh.'))),
+            ("Aloqa telefoni:", str(rec.get('Telefon'))),
+            ("Hudud (Viloyat / Tuman):", f"{rec.get('Viloyat')}, {rec.get('Tuman')}"),
+            ("Ijro yuklatilgan mas'ul:", str(rec.get('Masul_Komplayens')))
+        ]
+
+        for i, (k, v) in enumerate(rows_data):
+            cell_k = table.rows[i].cells[0]
+            cell_v = table.rows[i].cells[1]
+            cell_k.width = Inches(2.2)
+            cell_v.width = Inches(4.5)
+            
+            p_k = cell_k.paragraphs[0]
+            r_k = p_k.add_run(k)
+            r_k.bold = True
+            r_k.font.name = 'Times New Roman'
+            r_k.font.size = Pt(11)
+
+            p_v = cell_v.paragraphs[0]
+            r_v = p_v.add_run(v)
+            r_v.font.name = 'Times New Roman'
+            r_v.font.size = Pt(11)
+
+        p_m = doc.add_paragraph()
+        p_m.paragraph_format.space_before = Pt(12)
+        r_m_title = p_m.add_run("Fuqaro murojaatining matni:")
+        r_m_title.bold = True
+        r_m_title.font.name = 'Times New Roman'
+        r_m_title.font.size = Pt(12)
+
+        p_m_text = doc.add_paragraph()
+        p_m_text.paragraph_format.line_spacing = 1.15
+        p_m_text.paragraph_format.space_after = Pt(12)
+        r_txt = p_m_text.add_run(str(rec.get('Murojaat matni', '')))
+        r_txt.font.name = 'Times New Roman'
+        r_txt.font.size = Pt(11)
+
+        p_req = doc.add_paragraph()
+        p_req.paragraph_format.line_spacing = 1.15
+        r_req = p_req.add_run(
+            "TOPShIRIQ: Mazkur murojaatda keltirilgan vajlar belgilangan qonuniy muddatda (15 kun ichida) to‘liq "
+            "va xolisona o‘rganilib, natijasi hamda ko‘rilgan ta’sir choralari bo‘yicha tegishli asoslovchi hujjatlar (xulosa, buyruq) "
+            "bilan birga Korrupsiyaga qarshi kurashish bo‘limiga axborot kiritilishi ta’minlansin."
+        )
+        r_req.italic = True
+        r_req.font.name = 'Times New Roman'
+        r_req.font.size = Pt(11)
+
+        p_sign = doc.add_paragraph()
+        p_sign.paragraph_format.space_before = Pt(30)
+        table_s = doc.add_table(rows=1, cols=2)
+        table_s.alignment = WD_TABLE_ALIGNMENT.CENTER
         
-        default_file = os.path.join("data", "murojaatlar.xlsx")
-        if excel_path and os.path.exists(excel_path):
-            self.load_from_excel(excel_path)
-        elif os.path.exists(default_file):
-            self.load_from_excel(default_file)
-        else:
-            self.refresh_data()
-
-    def load_from_excel(self, file_path):
-        raw_df = pd.read_excel(file_path)
-        raw_df.columns = [col.strip() for col in raw_df.columns]
+        c_left = table_s.rows[0].cells[0]
+        c_right = table_s.rows[0].cells[1]
         
-        if '#' in raw_df.columns:
-            raw_df = raw_df[raw_df['#'] > 9]
+        r_sl = c_left.paragraphs[0].add_run("Korrupsiyaga qarshi kurashish\nbo‘limi bosh mutaxassisi")
+        r_sl.bold = True
+        r_sl.font.name = 'Times New Roman'
+        r_sl.font.size = Pt(11)
+        
+        r_sr = c_right.paragraphs[0].add_run("______________ (imzo)")
+        r_sr.font.name = 'Times New Roman'
+        r_sr.font.size = Pt(11)
 
-        self._classify(raw_df)
-        self.db.sync_excel_data(raw_df)
-        self.refresh_data()
+        doc.save(output_path)
+        return output_path
 
-    def refresh_data(self):
-        self.df = self.db.get_all_records()
-        if not self.df.empty:
-            self.df['DT'] = pd.to_datetime(self.df['Yaratilgan sana'], errors='coerce')
-        self.filtered_df = self.df.copy()
+    @staticmethod
+    def export_excel(df, file_path):
+        export_df = df.copy()
+        if 'DT' in export_df.columns and export_df['DT'].notnull().any():
+            export_df = export_df.sort_values(by='DT', ascending=False)
+        elif 'Yaratilgan sana' in export_df.columns:
+            export_df = export_df.sort_values(by='Yaratilgan sana', ascending=False)
 
-    def _classify(self, df):
-        def get_exact_yonalish(val):
-            s = str(val).strip()
-            if 'palata' in s.lower():
-                return 'Davlat kadastrlari palatasi hududiy boshqarmasi'
-            return 'Kadastr agentligi hududiy boshqarmasi'
+        cols = [
+            'Yaratilgan sana', 'Manba', 'F.I.Sh.', 'Telefon', 'Viloyat', 'Tuman', 
+            'Yoʻnalish', 'Masul_Komplayens', 'Ijro_Holati', 
+            'Chora_Turi', 'Organish_Natijasi', 'Murojaat matni'
+        ]
+        available = [c for c in cols if c in export_df.columns]
+        sub_df = export_df[available].copy()
+        sub_df.insert(0, 'T/r', range(1, len(sub_df) + 1))
 
-        df['Aniq_Yonalish'] = df['Yoʻnalish'].apply(get_exact_yonalish)
-
-    def get_available_periods(self):
-        periods = ["Barchasi", "Joriy hafta", "Joriy oy", "I-chorak", "II-chorak", "III-chorak", "IV-chorak"]
-        if not self.df.empty and 'DT' in self.df.columns and self.df['DT'].notnull().any():
-            years = sorted(self.df['DT'].dropna().dt.year.unique(), reverse=True)
-            for y in years:
-                periods.append(f"{y}-yil")
-        else:
-            periods.extend(["2027-yil", "2026-yil", "2025-yil"])
-        return periods
-
-    def filter_data(self, period='Barchasi', masul='Barchasi', manba='Barchasi', search_query=''):
-        temp = self.df.copy()
-        if temp.empty:
-            self.filtered_df = temp
-            return temp
-
-        # Davr filtri
-        if 'DT' in temp.columns and temp['DT'].notnull().any():
-            max_date = temp['DT'].max()
-            if period == 'Joriy hafta':
-                start_week = max_date - timedelta(days=7)
-                temp = temp[temp['DT'] >= start_week]
-            elif period == 'Joriy oy':
-                temp = temp[(temp['DT'].dt.year == max_date.year) & (temp['DT'].dt.month == max_date.month)]
-            elif period == 'I-chorak':
-                temp = temp[temp['DT'].dt.quarter == 1]
-            elif period == 'II-chorak':
-                temp = temp[temp['DT'].dt.quarter == 2]
-            elif period == 'III-chorak':
-                temp = temp[temp['DT'].dt.quarter == 3]
-            elif period == 'IV-chorak':
-                temp = temp[temp['DT'].dt.quarter == 4]
-            elif '-yil' in str(period):
-                try:
-                    y = int(str(period).replace('-yil', '').strip())
-                    temp = temp[temp['DT'].dt.year == y]
-                except Exception:
-                    pass
-
-        # Mas'ul komplayens filtri
-        if masul != 'Barchasi':
-            temp = temp[temp['Masul_Komplayens'] == masul]
-
-        # Manba filtri (Telegram bot vs Telefon)
-        if manba == 'Telegram bot':
-            temp = temp[temp['Manba'].astype(str).str.contains('Telegram', case=False, na=False)]
-        elif 'Telefon' in manba:
-            temp = temp[temp['Manba'].astype(str).str.contains('Telefon|273-19-66', case=False, na=False)]
-
-        # Global poisk
-        if search_query:
-            q = str(search_query).strip().lower()
-            temp = temp[
-                temp['F.I.Sh.'].astype(str).str.lower().str.contains(q) |
-                temp['Telefon'].astype(str).str.lower().str.contains(q) |
-                temp['Viloyat'].astype(str).str.lower().str.contains(q) |
-                temp['Tuman'].astype(str).str.lower().str.contains(q) |
-                temp['Murojaat matni'].astype(str).str.lower().str.contains(q) |
-                temp['Organish_Natijasi'].astype(str).str.lower().str.contains(q)
-            ]
-
-        self.filtered_df = temp
-        return temp
-
-    def get_kpi_stats(self):
-        d = self.filtered_df
-        total = len(d)
-        if total == 0:
-            return {
-                "total": 0, "tg_total": 0, "phone_total": 0,
-                "agentlik_organish": 0, "palata_organish": 0,
-                "natija_kiritilgan": 0, "asossiz": 0,
-                "muddati_otgan_15": 0, "ogohlantirish_10": 0,
-                "takroriy_soni": 0, "chora_krilgan_soni": 0,
-                "chorak_taqsimot": {"I": 0, "II": 0, "III": 0, "IV": 0}
-            }
-
-        tg_total = len(d[d['Manba'].astype(str).str.contains('Telegram', case=False, na=False)])
-        phone_total = len(d[d['Manba'].astype(str).str.contains('Telefon|273-19-66', case=False, na=False)])
-
-        is_organish = d['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)
-        agentlik_org = len(d[is_organish & d['Masul_Komplayens'].astype(str).str.contains("agentligi", case=False, na=False)])
-        palata_org = len(d[is_organish & d['Masul_Komplayens'].astype(str).str.contains("palata", case=False, na=False)])
-
-        natija_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora|O‘rganib chiqildi", case=False, na=False)])
-        asossiz_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Asossiz", case=False, na=False)])
-
-        now_date = datetime.now()
-        org_df = d[is_organish].copy()
-        muddati_otgan_15 = 0
-        ogohlantirish_10 = 0
-        if not org_df.empty and 'DT' in org_df.columns:
-            days_diff = (now_date - org_df['DT']).dt.days
-            muddati_otgan_15 = len(days_diff[days_diff > 15])
-            ogohlantirish_10 = len(days_diff[(days_diff >= 10) & (days_diff <= 15)])
-
-        clean_phones = d['Telefon'].astype(str).str.strip()
-        dup_counts = clean_phones.value_counts()
-        takroriy_soni = len(d[d['Telefon'].isin(dup_counts[dup_counts > 1].index)])
-
-        chora_mask = d['Chora_Turi'].astype(str).str.contains("Xayfsan|Lavozimidan ozod|Prokuratura|Jarima", case=False, na=False)
-        chora_krilgan_soni = len(d[chora_mask])
-
-        choraklar = {"I": 0, "II": 0, "III": 0, "IV": 0}
-        if 'DT' in d.columns and d['DT'].notnull().any():
-            q_counts = d['DT'].dt.quarter.value_counts()
-            choraklar["I"] = int(q_counts.get(1, 0))
-            choraklar["II"] = int(q_counts.get(2, 0))
-            choraklar["III"] = int(q_counts.get(3, 0))
-            choraklar["IV"] = int(q_counts.get(4, 0))
-
-        return {
-            "total": total,
-            "tg_total": tg_total,
-            "phone_total": phone_total,
-            "agentlik_organish": agentlik_org,
-            "palata_organish": palata_org,
-            "natija_kiritilgan": natija_count,
-            "asossiz": asossiz_count,
-            "muddati_otgan_15": muddati_otgan_15,
-            "ogohlantirish_10": ogohlantirish_10,
-            "takroriy_soni": takroriy_soni,
-            "chora_krilgan_soni": chora_krilgan_soni,
-            "chorak_taqsimot": choraklar
+        col_rename = {
+            'Yaratilgan sana': 'Kelib tushgan sana',
+            'Manba': 'Murojaat manbasi',
+            'Yoʻnalish': 'Yoʻnalish turi',
+            'Masul_Komplayens': 'Mas’ul komplayens organi',
+            'Ijro_Holati': 'Ijro holati',
+            'Chora_Turi': 'Ko‘rilgan chora',
+            'Organish_Natijasi': 'O‘rganish natijasi',
+            'Murojaat matni': 'Murojaat mazmuni'
         }
+        sub_df = sub_df.rename(columns=col_rename)
+
+        with pd.ExcelWriter(file_path, engine='openpyxl') as writer:
+            sheet_name = "Murojaatlar_Reyestri"
+            sub_df.to_excel(writer, sheet_name=sheet_name, index=False)
+            ws = writer.sheets[sheet_name]
+            ws.views.sheetView[0].showGridLines = True
+
+            navy_fill = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
+            zebra_fill = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
+            thin_border = Border(
+                left=Side(style='thin', color='B0C4DE'), right=Side(style='thin', color='B0C4DE'),
+                top=Side(style='thin', color='B0C4DE'), bottom=Side(style='thin', color='B0C4DE')
+            )
+
+            ws.row_dimensions[1].height = 32
+            for col_idx in range(1, len(sub_df.columns) + 1):
+                cell = ws.cell(row=1, column=col_idx)
+                cell.fill = navy_fill
+                cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                cell.border = thin_border
+
+            for row_idx in range(2, len(sub_df) + 2):
+                ws.row_dimensions[row_idx].height = 28
+                is_even = (row_idx % 2 == 0)
+                for col_idx in range(1, len(sub_df.columns) + 1):
+                    cell = ws.cell(row=row_idx, column=col_idx)
+                    cell.font = Font(name="Calibri", size=10)
+                    cell.border = thin_border
+                    if is_even: cell.fill = zebra_fill
+                    cell.alignment = Alignment(vertical="center", wrap_text=True)
+
+            col_widths = {
+                'T/r': 8, 'Kelib tushgan sana': 19, 'Murojaat manbasi': 24,
+                'F.I.Sh.': 26, 'Telefon': 16, 'Viloyat': 22, 'Tuman': 20,
+                'Yoʻnalish turi': 32, 'Mas’ul komplayens organi': 36,
+                'Ijro holati': 18, 'Ko‘rilgan chora': 22,
+                'O‘rganish natijasi': 45, 'Murojaat mazmuni': 55
+            }
+            for col_idx, col_name in enumerate(sub_df.columns, 1):
+                col_letter = get_column_letter(col_idx)
+                ws.column_dimensions[col_letter].width = col_widths.get(col_name, 22)
+
+            last_col = get_column_letter(len(sub_df.columns))
+            ws.auto_filter.ref = f"A1:{last_col}{len(sub_df) + 1}"
+
+    @staticmethod
+    def export_word_report(stats, reg_stats, file_path, period_name="Barchasi"):
+        if not HAS_DOCX:
+            return None
+
+        doc = Document()
+        section = doc.sections[0]
+        section.top_margin = Inches(0.8)
+        section.bottom_margin = Inches(0.8)
+        section.left_margin = Inches(1.0)
+        section.right_margin = Inches(0.8)
+
+        p_head = doc.add_paragraph()
+        p_head.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r1 = p_head.add_run("O‘ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI\n")
+        r1.bold = True
+        r1.font.name = 'Times New Roman'
+        r1.font.size = Pt(13)
+
+        r2 = p_head.add_run("KORRUPSIYAGA QARSHI KURASHISH BO‘LIMI\n")
+        r2.bold = True
+        r2.font.name = 'Times New Roman'
+        r2.font.size = Pt(12)
+
+        r_tel = p_head.add_run("Ishonch telefoni: +998-71-273-19-66\n\n")
+        r_tel.font.name = 'Times New Roman'
+        r_tel.font.size = Pt(10)
+        r_tel.italic = True
+
+        current_year = datetime.now().year
+        davr_matni = f"{current_year}-yil holatiga ko‘ra" if period_name in ["Barchasi", ""] else f"{period_name} holatiga ko‘ra"
+
+        r3 = p_head.add_run(f"MA’LUMOTNOMA\n({davr_matni})\n")
+        r3.bold = True
+        r3.font.name = 'Times New Roman'
+        r3.font.size = Pt(14)
+        r3.font.color.rgb = RGBColor(15, 37, 55)
+
+        p_body = doc.add_paragraph()
+        p_body.paragraph_format.line_spacing = 1.15
+        p_body.paragraph_format.first_line_indent = Inches(0.4)
+        r_body = p_body.add_run(
+            f"Kadastr tizimi korrupsiyaga qarshi kurashish kanallari (rasmiy Telegram bot hamda +998-71-273-19-66 ishonch telefoni) orqali "
+            f"hisobot davrida jami {stats['total']} ta murojaat kelib tushgan (shundan Telegram bot orqali: {stats['tg_total']} ta, ishonch telefoni orqali: {stats['phone_total']} ta). "
+            f"Mazkur murojaatlarning hududiy komplayens xodimlari tomonidan o‘rganilishi va ijro holati quyidagicha taqsimlangan:"
+        )
+        r_body.font.name = 'Times New Roman'
+        r_body.font.size = Pt(12)
+
+        table = doc.add_table(rows=1, cols=3)
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.style = 'Table Grid'
+        hdr_cells = table.rows[0].cells
+        for idx, title in enumerate(["T/r", "Ko‘rsatkich nomi", "Soni (ta)"]):
+            hdr_cells[idx].text = title
+            p = hdr_cells[idx].paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for r in p.runs:
+                r.bold = True
+                r.font.name = 'Times New Roman'
+                r.font.size = Pt(11)
+
+        data_rows = [
+            ("1", "Jami ko‘rib chiqilayotgan murojaatlar", str(stats['total'])),
+            ("2", "— Shundan Telegram bot orqali", str(stats['tg_total'])),
+            ("3", "— Shundan Ishonch telefoni orqali (+998-71-273-19-66)", str(stats['phone_total'])),
+            ("4", "Agentlik hududiy komplayens xodimlarida o‘rganishda", str(stats['agentlik_organish'])),
+            ("5", "Palata hududiy komplayens xodimlarida o‘rganishda", str(stats['palata_organish'])),
+            ("6", "O‘rganib chiqilgan (bartaraf etilgan / chora ko‘rilgan)", str(stats['natija_kiritilgan'])),
+            ("7", "O‘rganish natijasida asossiz deb topilgan", str(stats['asossiz']))
+        ]
+        for row in data_rows:
+            row_cells = table.add_row().cells
+            row_cells[0].text = row[0]
+            row_cells[1].text = row[1]
+            row_cells[2].text = row[2]
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            row_cells[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+            row_cells[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for c in row_cells:
+                for r in c.paragraphs[0].runs:
+                    r.font.name = 'Times New Roman'
+                    r.font.size = Pt(11)
+
+        p_reg = doc.add_paragraph()
+        p_reg.paragraph_format.space_before = Pt(12)
+        r_reg_h = p_reg.add_run("Eng ko‘p murojaat kelib tushgan hududlar kesimi:")
+        r_reg_h.bold = True
+        r_reg_h.font.name = 'Times New Roman'
+        r_reg_h.font.size = Pt(12)
+
+        for reg, cnt in reg_stats.head(5).items():
+            p_item = doc.add_paragraph()
+            p_item.paragraph_format.left_indent = Inches(0.2)
+            r_item = p_item.add_run(f"• {reg}: {cnt} ta murojaat")
+            r_item.font.name = 'Times New Roman'
+            r_item.font.size = Pt(11)
+
+        p_sign = doc.add_paragraph()
+        p_sign.paragraph_format.space_before = Pt(36)
+        table_s = doc.add_table(rows=1, cols=2)
+        table_s.alignment = WD_TABLE_ALIGNMENT.CENTER
+        c_left = table_s.rows[0].cells[0]
+        c_right = table_s.rows[0].cells[1]
+        r_sl = c_left.paragraphs[0].add_run("Korrupsiyaga qarshi kurashish\nbo‘limi bosh mutaxassisi")
+        r_sl.bold = True
+        r_sl.font.name = 'Times New Roman'
+        r_sl.font.size = Pt(11)
+        r_sr = c_right.paragraphs[0].add_run("______________ (imzo)")
+        r_sr.font.name = 'Times New Roman'
+        r_sr.font.size = Pt(11)
+
+        doc.save(file_path)
