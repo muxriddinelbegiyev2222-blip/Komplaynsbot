@@ -16,7 +16,6 @@ except ImportError:
 class ReportGenerator:
     @staticmethod
     def generate_resolution_report(rec, output_path, header_text):
-        """Murojaat bo'yicha yakuniy xulosa ma'lumotnomasini yaratish"""
         if not HAS_DOCX: return None
         doc = Document()
         section = doc.sections[0]
