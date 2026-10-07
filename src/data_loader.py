@@ -30,7 +30,6 @@ class DataLoader:
         self.refresh_data()
 
     def _clean_phone(self, phone):
-        """Telefon raqamlarini tozalash va standart formatga keltirish"""
         ph = str(phone).strip()
         ph = re.sub(r'[^\d+]', '', ph)
         if len(ph) == 9: ph = "+998" + ph
@@ -39,7 +38,6 @@ class DataLoader:
         return ph
 
     def _mark_risk(self, text):
-        """Matnda korrupsiyaviy xavf so'zlari borligini aniqlash"""
         t = str(text).lower()
         danger_words = ["pora", "pul so'radi", "tamagirlik", "dollar", "berdim", "pul talab", "tanish-bilish", "soqqa"]
         return any(w in t for w in danger_words)
@@ -123,11 +121,12 @@ class DataLoader:
         agentlik_org = len(d[is_org & d['Masul_Komplayens'].astype(str).str.contains("agentligi", case=False, na=False)])
         palata_org = len(d[is_org & d['Masul_Komplayens'].astype(str).str.contains("palata", case=False, na=False)])
 
-        # MANTIQIY YECHIM: "Asossiz" ham o'rganib chiqilganlar qatoriga qo'shildi
-        is_hal = d['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora|O‘rganib chiqildi|Asossiz", case=False, na=False)
+        # MANTIQIY YECHIM: Asossiz ham o'rganilgan hisoblanadi. (Holatda bo'lsa ham, Chorada bo'lsa ham)
+        is_hal = d['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora|O‘rganib chiqildi|Asossiz", case=False, na=False) | d['Chora_Turi'].astype(str).str.contains("Asossiz", case=False, na=False)
         natija_count = len(d[is_hal])
         
-        asossiz_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Asossiz", case=False, na=False)])
+        # Asossizlarning umumiy miqdori
+        asossiz_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Asossiz", case=False, na=False) | d['Chora_Turi'].astype(str).str.contains("Asossiz", case=False, na=False)])
 
         muddati_otgan_15 = 0; ogohlantirish_10 = 0
         if not d[is_org].empty and 'DT' in d[is_org].columns:
