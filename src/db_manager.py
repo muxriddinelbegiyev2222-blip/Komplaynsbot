@@ -17,7 +17,6 @@ class DatabaseManager:
         return sqlite3.connect(self.db_path)
 
     def _auto_backup(self):
-        """Bazani avtomatik zaxiralash (Auto-backup)"""
         try:
             if os.path.exists(self.db_path):
                 backup_dir = os.path.join("data", "backup")
@@ -32,7 +31,6 @@ class DatabaseManager:
     def _init_db(self):
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            # Murojaatlar jadvali
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS murojaatlar (
                     id INTEGER PRIMARY KEY,
@@ -52,11 +50,11 @@ class DatabaseManager:
                     organish_natijasi TEXT DEFAULT '',
                     biriktirilgan_fayl TEXT DEFAULT '',
                     masul_komplayens TEXT DEFAULT '',
-                    chora_turi TEXT DEFAULT 'Chora ko‘rilmagan'
+                    chora_turi TEXT DEFAULT 'Chora ko‘rilmagan',
+                    manba TEXT DEFAULT 'Telegram bot'
                 )
             """)
 
-            # Hududiy komplayens xodimlari ma'lumotnomasi
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS xodimlar (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +66,6 @@ class DatabaseManager:
                 )
             """)
 
-            # Standart hududlar bo'yicha boshlang'ich yozuvlarni kiritish
             cursor.execute("SELECT COUNT(*) FROM xodimlar")
             if cursor.fetchone()[0] == 0:
                 regions = [
@@ -107,8 +104,8 @@ class DatabaseManager:
                         INSERT INTO murojaatlar (
                             id, yaratilgan_sana, fish, telefon, viloyat, tuman,
                             yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan,
-                            javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi, manba
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Telegram bot')
                     """, (
                         m_id,
                         str(row.get('Yaratilgan sana', '')),
@@ -142,6 +139,26 @@ class DatabaseManager:
                     ))
             conn.commit()
 
+    def insert_phone_murojaat(self, fish, telefon, viloyat, tuman, yonalish, matn, masul_komplayens):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COALESCE(MAX(id), 100) FROM murojaatlar")
+            max_id = cursor.fetchone()[0]
+            new_id = max(max_id + 1, 101)
+
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            aniq_y = "Davlat kadastrlari palatasi hududiy boshqarmasi" if "palata" in yonalish.lower() else "Kadastr agentligi hududiy boshqarmasi"
+
+            cursor.execute("""
+                INSERT INTO murojaatlar (
+                    id, yaratilgan_sana, fish, telefon, viloyat, tuman,
+                    yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan,
+                    javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi, manba
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Yangi', ?, '', '', '', 'O‘rganishga yuborilgan', '', '', ?, 'Chora ko‘rilmagan', 'Ishonch telefoni (+998-71-273-19-66)')
+            """, (new_id, now_str, fish, telefon, viloyat, tuman, yonalish, aniq_y, matn, masul_komplayens))
+            conn.commit()
+            return new_id
+
     def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi, biriktirilgan_fayl='', masul_komplayens='', chora_turi='Chora ko‘rilmagan'):
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -173,8 +190,12 @@ class DatabaseManager:
                 'organish_natijasi': 'Organish_Natijasi',
                 'biriktirilgan_fayl': 'Biriktirilgan_Fayl',
                 'masul_komplayens': 'Masul_Komplayens',
-                'chora_turi': 'Chora_Turi'
+                'chora_turi': 'Chora_Turi',
+                'manba': 'Manba'
             })
+            if 'Manba' not in df.columns:
+                df['Manba'] = 'Telegram bot'
+            df['Manba'] = df['Manba'].fillna('Telegram bot')
             return df
 
     def get_xodimlar(self):
