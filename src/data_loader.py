@@ -33,7 +33,7 @@ class DataLoader:
 
     def _mark_risk(self, text):
         t = str(text).lower()
-        return any(w in t for w in ["pora", "pul so'radi", "tamagirlik", "dollar", "berdim", "pul talab", "tanish-bilish", "soqqa"])
+        return any(w in t for w in ["pora", "pul so'radi", "tamagirlik", "dollar", "berdim", "pul talab", "tanish-bilish", "soqqa", "noqonuniy"])
 
     def refresh_data(self):
         self.df = self.db.get_all_records()
@@ -87,7 +87,8 @@ class DataLoader:
             return {"total":0, "tg_total":0, "phone_total":0, "agentlik_organish":0, "palata_organish":0, "natija_kiritilgan":0, "asossiz":0, "muddati_otgan":0, "ogohlantirish":0, "takroriy_soni":0, "chora_krilgan_soni":0, "chorak_taqsimot":{"I":0, "II":0, "III":0, "IV":0}, "sla_days": 2}
 
         sets = self.db.get_settings()
-        sla_limit = int(sets.get("sla_days", "2"))
+        try: sla_limit = int(sets.get("sla_days", "2"))
+        except: sla_limit = 2
 
         tg_total = len(d[d['Manba'].astype(str).str.contains('Telegram', case=False, na=False)])
         phone_total = len(d[d['Manba'].astype(str).str.contains('Telefon|273-19-66', case=False, na=False)])
