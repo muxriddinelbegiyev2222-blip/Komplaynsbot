@@ -29,12 +29,19 @@ class DatabaseManager:
             'Biriktirilgan_Fayl', 'Masul_Komplayens', 'Chora_Turi', 'Manba'
         ]
         
+        self.users_headers = ['ID', 'Username', 'Password', 'Role', 'Active']
+        
         self._init_db()
         self._auto_backup()
         
         # Bulutga (Google Sheets) ulanishni tekshirish
         self.client = self._connect_gsheets()
         self.sheet = self._ensure_worksheet_and_headers()
+        self.users_sheet = self._ensure_users_worksheet()
+        
+        # Dastur ochilishi bilan bulutdan murojaatlar va foydalanuvchilarni tortish
+        self._sync_pull_from_cloud()
+        self._sync_users_pull_from_cloud()
 
     def _get_connection(self):
         return sqlite3.connect(self.db_path)
@@ -75,7 +82,7 @@ class DatabaseManager:
                 )
             """)
             
-            # FOYDALANUVCHILAR (LOGIN/PAROL) JADVALI
+            # FOYDALANUVCHILAR JADVALI
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -86,7 +93,6 @@ class DatabaseManager:
                 )
             """)
             
-            # Agar bo'sh bo'lsa, asosiy adminni qo'shish
             cursor.execute("SELECT COUNT(*) FROM users")
             if cursor.fetchone()[0] == 0:
                 cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("admin", "admin123", "admin"))
@@ -107,48 +113,6 @@ class DatabaseManager:
             for k, v in default_settings.items():
                 cursor.execute("INSERT OR IGNORE INTO sozlamalar (key, val) VALUES (?, ?)", (k, v))
             conn.commit()
-
-    # ================= FOYDALANUVCHILARNI BOSHQARISH =================
-    def check_user_login(self, username, password):
-        """Kiritilgan login parolni tekshirish va uning rolini qaytarish"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT role FROM users WHERE username = ? AND password = ? AND active = 1", (username, password))
-            res = cursor.fetchone()
-            return res[0] if res else None
-
-    def get_all_users(self):
-        with self._get_connection() as conn:
-            return pd.read_sql_query("SELECT id, username, password, role FROM users", conn)
-
-    def add_user(self, username, password, role):
-        try:
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (username, password, role))
-                conn.commit()
-            return True
-        except sqlite3.IntegrityError:
-            return False # Login oldin ro'yxatdan o'tgan
-
-    def update_user(self, user_id, username, password, role):
-        try:
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?", (username, password, role, user_id))
-                conn.commit()
-            return True
-        except: 
-            return False
-
-    def delete_user(self, user_id):
-        if str(user_id) == "1": 
-            return False # Asosiy admin o'chirilmaydi
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
-            conn.commit()
-        return True
 
     # ================= CLOUD API YORDAMCHILARI =================
     def _connect_gsheets(self):
@@ -179,8 +143,25 @@ class DatabaseManager:
         except Exception: 
             return None
 
+    def _ensure_users_worksheet(self):
+        if self.client is None: 
+            return None
+        try:
+            spreadsheet = self.client.open(self.sheet_name)
+            try: 
+                sheet = spreadsheet.worksheet("Foydalanuvchilar")
+            except gspread.exceptions.WorksheetNotFound: 
+                sheet = spreadsheet.add_worksheet(title="Foydalanuvchilar", rows="100", cols="5")
+                
+            headers = sheet.row_values(1)
+            if not headers:
+                sheet.insert_row(self.users_headers, 1)
+                sheet.format('A1:E1', {'textFormat': {'bold': True}})
+            return sheet
+        except Exception: 
+            return None
+
     def _sync_pull_from_cloud(self):
-        """Bulutdagi eng so'nggi ma'lumotlarni Mahalliy bazaga yozib olish"""
         if self.sheet is None: 
             return
         try:
@@ -208,6 +189,48 @@ class DatabaseManager:
                 conn.commit()
         except Exception: 
             pass
+
+    def _sync_users_pull_from_cloud(self):
+        if self.users_sheet is None: 
+            return
+        try:
+            records = self.users_sheet.get_all_records()
+            if not records: 
+                return
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                for row in records:
+                    u_id = int(row.get('ID', 0))
+                    username = str(row.get('Username', ''))
+                    password = str(row.get('Password', ''))
+                    role = str(row.get('Role', ''))
+                    active = int(row.get('Active', 1))
+                    if not username: continue
+                    
+                    cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+                    exists = cursor.fetchone()
+                    if not exists:
+                        cursor.execute("INSERT INTO users (username, password, role, active) VALUES (?, ?, ?, ?)", (username, password, role, active))
+                    else:
+                        cursor.execute("UPDATE users SET password = ?, role = ?, active = ? WHERE username = ?", (password, role, active, username))
+                conn.commit()
+        except Exception: 
+            pass
+
+    def _sync_single_user_to_cloud(self, user_id, username, password, role, active=1):
+        if self.users_sheet is None: 
+            return
+        def push_user():
+            try:
+                cell = self.users_sheet.find(str(user_id), in_column=1)
+                values = [str(user_id), str(username), str(password), str(role), int(active)]
+                if cell:
+                    self.users_sheet.update(f"A{cell.row}:E{cell.row}", [values])
+                else:
+                    self.users_sheet.append_row(values)
+            except Exception: 
+                pass
+        threading.Thread(target=push_user, daemon=True).start()
 
     def _sync_single_row_to_cloud(self, row_data):
         if self.sheet is None: 
@@ -242,6 +265,51 @@ class DatabaseManager:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM murojaatlar WHERE id = ?", (m_id,))
             return cursor.fetchone()
+
+    # ================= FOYDALANUVCHILARNI BOSHQARISH =================
+    def check_user_login(self, username, password):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT role FROM users WHERE username = ? AND password = ? AND active = 1", (username, password))
+            res = cursor.fetchone()
+            return res[0] if res else None
+
+    def get_all_users(self):
+        with self._get_connection() as conn:
+            return pd.read_sql_query("SELECT id, username, password, role FROM users", conn)
+
+    def add_user(self, username, password, role):
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (username, password, role))
+                user_id = cursor.lastrowid
+                conn.commit()
+            self._sync_single_user_to_cloud(user_id, username, password, role, 1)
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def update_user(self, user_id, username, password, role):
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?", (username, password, role, user_id))
+                conn.commit()
+            self._sync_single_user_to_cloud(user_id, username, password, role, 1)
+            return True
+        except: 
+            return False
+
+    def delete_user(self, user_id):
+        if str(user_id) == "1": 
+            return False
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            conn.commit()
+        self._sync_single_user_to_cloud(user_id, "DELETED", "", "", 0)
+        return True
 
     # ================= ASOSIY LOKAL MANTIQ VA TRIGGERLAR =================
     def get_settings(self):
