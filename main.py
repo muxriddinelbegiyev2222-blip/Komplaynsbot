@@ -15,7 +15,8 @@ class LoginWindow(ctk.CTk):
         ctk.set_appearance_mode("Light")
         self.configure(fg_color="#ECEFF4")
 
-        self.db = DatabaseManager() # Bazani yuklash
+        # Bazani ulaymiz
+        self.db = DatabaseManager()
 
         frame = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=10, border_width=1, border_color="#CBD5E1")
         frame.pack(fill="both", expand=True, padx=20, pady=20)
@@ -30,6 +31,8 @@ class LoginWindow(ctk.CTk):
         ctk.CTkLabel(frame, text="Parol:", font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=50)
         self.password = ctk.CTkEntry(frame, placeholder_text="Maxfiy so'z", show="*", width=300, height=35)
         self.password.pack(pady=(5, 20))
+        
+        # Enter bosilganda ham kirish
         self.password.bind("<Return>", lambda event: self.check_login())
 
         ctk.CTkButton(frame, text="Tizimga kirish ➔", width=300, height=40, fg_color="#1B4D7E", hover_color="#1E3A56", font=ctk.CTkFont(size=14, weight="bold"), command=self.check_login).pack()
@@ -38,7 +41,7 @@ class LoginWindow(ctk.CTk):
         user = self.username.get().strip()
         pwd = self.password.get().strip()
 
-        # Endi to'g'ridan to'g'ri foydalanuvchilar bazasidan tekshiramiz
+        # Tizim bazasidan (users jadvalidan) tekshirish
         role = self.db.check_user_login(user, pwd)
         
         if role:
@@ -48,6 +51,7 @@ class LoginWindow(ctk.CTk):
             messagebox.showerror("Xatolik", "Login yoki parol noto'g'ri yoxud akkaunt bloklangan!")
 
 def start_app(role):
+    # Dastur ishlashi uchun kerakli papkalarni yaratish
     os.makedirs("data", exist_ok=True)
     os.makedirs(os.path.join("data", "attachments"), exist_ok=True)
     os.makedirs(os.path.join("data", "topshiriqlar"), exist_ok=True)
