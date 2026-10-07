@@ -5,6 +5,7 @@ import shutil
 import threading
 from datetime import datetime
 
+# Google Sheets ulanishi uchun
 try:
     import gspread
     from oauth2client.service_account import ServiceAccountCredentials
@@ -30,6 +31,8 @@ class DatabaseManager:
         
         self._init_db()
         self._auto_backup()
+        
+        # Bulutga (Google Sheets) ulanishni tekshirish
         self.client = self._connect_gsheets()
         self.sheet = self._ensure_worksheet_and_headers()
 
@@ -51,6 +54,8 @@ class DatabaseManager:
     def _init_db(self):
         with self._get_connection() as conn:
             cursor = conn.cursor()
+            
+            # Asosiy jadvallar
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS murojaatlar (
                     id INTEGER PRIMARY KEY,
@@ -62,6 +67,7 @@ class DatabaseManager:
                     manba TEXT DEFAULT 'Telegram bot'
                 )
             """)
+            
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS xodimlar (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, viloyat TEXT, tashkilot_turi TEXT,
@@ -72,7 +78,11 @@ class DatabaseManager:
             # FOYDALANUVCHILAR (LOGIN/PAROL) JADVALI
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, role TEXT, active INTEGER DEFAULT 1
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                    username TEXT UNIQUE, 
+                    password TEXT, 
+                    role TEXT, 
+                    active INTEGER DEFAULT 1
                 )
             """)
             
@@ -100,6 +110,7 @@ class DatabaseManager:
 
     # ================= FOYDALANUVCHILARNI BOSHQARISH =================
     def check_user_login(self, username, password):
+        """Kiritilgan login parolni tekshirish va uning rolini qaytarish"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT role FROM users WHERE username = ? AND password = ? AND active = 1", (username, password))
@@ -118,7 +129,7 @@ class DatabaseManager:
                 conn.commit()
             return True
         except sqlite3.IntegrityError:
-            return False # Login band
+            return False # Login oldin ro'yxatdan o'tgan
 
     def update_user(self, user_id, username, password, role):
         try:
@@ -127,10 +138,12 @@ class DatabaseManager:
                 cursor.execute("UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?", (username, password, role, user_id))
                 conn.commit()
             return True
-        except: return False
+        except: 
+            return False
 
     def delete_user(self, user_id):
-        if str(user_id) == "1": return False # Asosiy adminni o'chirish mumkin emas
+        if str(user_id) == "1": 
+            return False # Asosiy admin o'chirilmaydi
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
@@ -139,31 +152,41 @@ class DatabaseManager:
 
     # ================= CLOUD API YORDAMCHILARI =================
     def _connect_gsheets(self):
-        if not HAS_GSHEETS or not os.path.exists(self.json_key_path): return None
+        if not HAS_GSHEETS or not os.path.exists(self.json_key_path): 
+            return None
         try:
             scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
             creds = ServiceAccountCredentials.from_json_keyfile_name(self.json_key_path, scope)
             return gspread.authorize(creds)
-        except Exception: return None
+        except Exception: 
+            return None
 
     def _ensure_worksheet_and_headers(self):
-        if self.client is None: return None
+        if self.client is None: 
+            return None
         try:
             spreadsheet = self.client.open(self.sheet_name)
-            try: sheet = spreadsheet.worksheet("Murojaatlar")
-            except gspread.exceptions.WorksheetNotFound: sheet = spreadsheet.add_worksheet(title="Murojaatlar", rows="1000", cols="20")
+            try: 
+                sheet = spreadsheet.worksheet("Murojaatlar")
+            except gspread.exceptions.WorksheetNotFound: 
+                sheet = spreadsheet.add_worksheet(title="Murojaatlar", rows="1000", cols="20")
+                
             headers = sheet.row_values(1)
             if not headers:
                 sheet.insert_row(self.gsheet_headers, 1)
                 sheet.format('A1:S1', {'textFormat': {'bold': True}})
             return sheet
-        except Exception: return None
+        except Exception: 
+            return None
 
     def _sync_pull_from_cloud(self):
-        if self.sheet is None: return
+        """Bulutdagi eng so'nggi ma'lumotlarni Mahalliy bazaga yozib olish"""
+        if self.sheet is None: 
+            return
         try:
             records = self.sheet.get_all_records()
-            if not records: return
+            if not records: 
+                return
             df = pd.DataFrame(records)
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -183,27 +206,35 @@ class DatabaseManager:
                             UPDATE murojaatlar SET holat = ?, ijro_holati = ?, organish_natijasi = ?, biriktirilgan_fayl = ?, masul_komplayens = ?, chora_turi = ?, javob = ?, javob_bergan = ?, javob_sanasi = ? WHERE id = ?
                         """, (str(row.get('Holat', '')), str(row.get('Ijro_Holati', '')), str(row.get('Organish_Natijasi', '')), str(row.get('Biriktirilgan_Fayl', '')), str(row.get('Masul_Komplayens', '')), str(row.get('Chora_Turi', '')), str(row.get('Javob', '')), str(row.get('Javob bergan', '')), str(row.get('Javob sanasi', '')), m_id))
                 conn.commit()
-        except Exception: pass
+        except Exception: 
+            pass
 
     def _sync_single_row_to_cloud(self, row_data):
-        if self.sheet is None: return
+        if self.sheet is None: 
+            return
         def push_data():
             try:
                 m_id = str(row_data[0])
                 cell = self.sheet.find(m_id, in_column=1)
                 values = [str(x) if x is not None else "" for x in row_data]
-                if cell: self.sheet.update(f"A{cell.row}:S{cell.row}", [values])
-                else: self.sheet.append_row(values)
-            except Exception: pass
+                if cell: 
+                    self.sheet.update(f"A{cell.row}:S{cell.row}", [values])
+                else: 
+                    self.sheet.append_row(values)
+            except Exception: 
+                pass
         threading.Thread(target=push_data, daemon=True).start()
 
     def _sync_batch_to_cloud(self, new_rows_data_list):
-        if self.sheet is None or not new_rows_data_list: return
+        if self.sheet is None or not new_rows_data_list: 
+            return
         def push_batch():
             try:
                 batch_values = [[str(x) if x is not None else "" for x in r] for r in new_rows_data_list]
-                if batch_values: self.sheet.append_rows(batch_values)
-            except Exception: pass
+                if batch_values: 
+                    self.sheet.append_rows(batch_values)
+            except Exception: 
+                pass
         threading.Thread(target=push_batch, daemon=True).start()
 
     def _get_row_by_id(self, m_id):
@@ -245,11 +276,14 @@ class DatabaseManager:
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'O‘rganishga yuborilgan', '', '', ?, 'Chora ko‘rilmagan', 'Telegram bot')
                     """, (m_id, str(row.get('Yaratilgan sana', '')), str(row.get('F.I.Sh.', '')), str(row.get('Telefon', '')), str(row.get('Viloyat', '')), str(row.get('Tuman', '')), str(row.get('Yoʻnalish', '')), str(row.get('Aniq_Yonalish', '')), str(row.get('Holat', '')), str(row.get('Murojaat matni', '')), str(row.get('Javob', '')), str(row.get('Javob bergan', '')), str(row.get('Javob sanasi', '')), default_masul))
                     row_data = self._get_row_by_id(m_id)
-                    if row_data: new_cloud_records.append(row_data)
+                    if row_data: 
+                        new_cloud_records.append(row_data)
                 else:
                     cursor.execute("UPDATE murojaatlar SET holat = ?, javob = ?, javob_bergan = ?, javob_sanasi = ?, aniq_yonalish = ? WHERE id = ?", (str(row.get('Holat', '')), str(row.get('Javob', '')), str(row.get('Javob bergan', '')), str(row.get('Javob sanasi', '')), str(row.get('Aniq_Yonalish', '')), m_id))
             conn.commit()
-        if new_cloud_records: self._sync_batch_to_cloud(new_cloud_records)
+            
+        if new_cloud_records: 
+            self._sync_batch_to_cloud(new_cloud_records)
 
     def insert_phone_murojaat(self, fish, telefon, viloyat, tuman, yonalish, matn, masul_komplayens):
         with self._get_connection() as conn:
@@ -267,7 +301,8 @@ class DatabaseManager:
             conn.commit()
             
         row_data = self._get_row_by_id(new_id)
-        if row_data: self._sync_single_row_to_cloud(row_data)
+        if row_data: 
+            self._sync_single_row_to_cloud(row_data)
         return new_id
 
     def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi, biriktirilgan_fayl='', masul_komplayens='', chora_turi='Chora ko‘rilmagan'):
@@ -277,18 +312,21 @@ class DatabaseManager:
             conn.commit()
             
         row_data = self._get_row_by_id(m_id)
-        if row_data: self._sync_single_row_to_cloud(row_data)
+        if row_data: 
+            self._sync_single_row_to_cloud(row_data)
 
     def get_all_records(self):
         with self._get_connection() as conn:
             df = pd.read_sql_query("SELECT * FROM murojaatlar WHERE id > 9 ORDER BY id DESC", conn)
             df = df.rename(columns={'id': '#', 'yaratilgan_sana': 'Yaratilgan sana', 'fish': 'F.I.Sh.', 'telefon': 'Telefon', 'viloyat': 'Viloyat', 'tuman': 'Tuman', 'yonalish': 'Yoʻnalish', 'aniq_yonalish': 'Aniq_Yonalish', 'holat': 'Holat', 'murojaat_matni': 'Murojaat matni', 'javob': 'Javob', 'javob_bergan': 'Javob bergan', 'javob_sanasi': 'Javob sanasi', 'ijro_holati': 'Ijro_Holati', 'organish_natijasi': 'Organish_Natijasi', 'biriktirilgan_fayl': 'Biriktirilgan_Fayl', 'masul_komplayens': 'Masul_Komplayens', 'chora_turi': 'Chora_Turi', 'manba': 'Manba'})
-            if 'Manba' not in df.columns: df['Manba'] = 'Telegram bot'
+            if 'Manba' not in df.columns: 
+                df['Manba'] = 'Telegram bot'
             df['Manba'] = df['Manba'].fillna('Telegram bot')
             return df
 
     def get_xodimlar(self):
-        with self._get_connection() as conn: return pd.read_sql_query("SELECT * FROM xodimlar ORDER BY viloyat ASC, tashkilot_turi ASC", conn)
+        with self._get_connection() as conn: 
+            return pd.read_sql_query("SELECT * FROM xodimlar ORDER BY viloyat ASC, tashkilot_turi ASC", conn)
 
     def save_xodim(self, x_id, fish, telefon, telegram_username):
         with self._get_connection() as conn:
@@ -296,4 +334,12 @@ class DatabaseManager:
             cursor.execute("UPDATE xodimlar SET fish = ?, telefon = ?, telegram_username = ? WHERE id = ?", (fish, telefon, telegram_username, x_id))
             conn.commit()
 
-    def find_xodim_for_region(self, viloy
+    def find_xodim_for_region(self, viloyat, masul_str):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            t_type = "Davlat kadastrlari palatasi" if "palata" in str(masul_str).lower() else "Kadastr agentligi"
+            cursor.execute("SELECT fish, telefon, telegram_username FROM xodimlar WHERE viloyat = ? AND tashkilot_turi = ?", (viloyat, t_type))
+            row = cursor.fetchone()
+            if row: 
+                return {"fish": row[0], "telefon": row[1], "username": row[2]}
+            return {"fish": "Noma'lum", "telefon": "", "username": ""}
