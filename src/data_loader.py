@@ -44,7 +44,6 @@ class DataLoader:
         df['Aniq_Yonalish'] = df['Yoʻnalish'].apply(get_exact_yonalish)
 
     def get_available_periods(self):
-        """Barcha yillarni (2025, 2026, 2027 va kelgusi) dinamik shakllantirish"""
         periods = ["Barchasi", "Joriy hafta", "Joriy oy", "I-chorak", "II-chorak", "III-chorak", "IV-chorak"]
         if not self.df.empty and 'DT' in self.df.columns and self.df['DT'].notnull().any():
             years = sorted(self.df['DT'].dropna().dt.year.unique(), reverse=True)
@@ -54,13 +53,13 @@ class DataLoader:
             periods.extend(["2027-yil", "2026-yil", "2025-yil"])
         return periods
 
-    def filter_data(self, period='Barchasi', masul='Barchasi', search_query=''):
+    def filter_data(self, period='Barchasi', masul='Barchasi', manba='Barchasi', search_query=''):
         temp = self.df.copy()
         if temp.empty:
             self.filtered_df = temp
             return temp
 
-        # Davr filtrlari
+        # Davr filtri
         if 'DT' in temp.columns and temp['DT'].notnull().any():
             max_date = temp['DT'].max()
             if period == 'Joriy hafta':
@@ -87,6 +86,12 @@ class DataLoader:
         if masul != 'Barchasi':
             temp = temp[temp['Masul_Komplayens'] == masul]
 
+        # Manba filtri (Telegram bot vs Telefon)
+        if manba == 'Telegram bot':
+            temp = temp[temp['Manba'].astype(str).str.contains('Telegram', case=False, na=False)]
+        elif 'Telefon' in manba:
+            temp = temp[temp['Manba'].astype(str).str.contains('Telefon|273-19-66', case=False, na=False)]
+
         # Global poisk
         if search_query:
             q = str(search_query).strip().lower()
@@ -107,12 +112,16 @@ class DataLoader:
         total = len(d)
         if total == 0:
             return {
-                "total": 0, "agentlik_organish": 0, "palata_organish": 0,
+                "total": 0, "tg_total": 0, "phone_total": 0,
+                "agentlik_organish": 0, "palata_organish": 0,
                 "natija_kiritilgan": 0, "asossiz": 0,
                 "muddati_otgan_15": 0, "ogohlantirish_10": 0,
                 "takroriy_soni": 0, "chora_krilgan_soni": 0,
                 "chorak_taqsimot": {"I": 0, "II": 0, "III": 0, "IV": 0}
             }
+
+        tg_total = len(d[d['Manba'].astype(str).str.contains('Telegram', case=False, na=False)])
+        phone_total = len(d[d['Manba'].astype(str).str.contains('Telefon|273-19-66', case=False, na=False)])
 
         is_organish = d['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)
         agentlik_org = len(d[is_organish & d['Masul_Komplayens'].astype(str).str.contains("agentligi", case=False, na=False)])
@@ -121,7 +130,6 @@ class DataLoader:
         natija_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora|O‘rganib chiqildi", case=False, na=False)])
         asossiz_count = len(d[d['Ijro_Holati'].astype(str).str.contains("Asossiz", case=False, na=False)])
 
-        # 1-BLOK ANALITIKASI: SLA (Muddatlar)
         now_date = datetime.now()
         org_df = d[is_organish].copy()
         muddati_otgan_15 = 0
@@ -131,16 +139,13 @@ class DataLoader:
             muddati_otgan_15 = len(days_diff[days_diff > 15])
             ogohlantirish_10 = len(days_diff[(days_diff >= 10) & (days_diff <= 15)])
 
-        # 2-BLOK ANALITIKASI: Takroriy murojaatlar (1 dan ortiq yozgan fuqarolar)
         clean_phones = d['Telefon'].astype(str).str.strip()
         dup_counts = clean_phones.value_counts()
         takroriy_soni = len(d[d['Telefon'].isin(dup_counts[dup_counts > 1].index)])
 
-        # 3-BLOK ANALITIKASI: Ko'rilgan choralar hisobi
         chora_mask = d['Chora_Turi'].astype(str).str.contains("Xayfsan|Lavozimidan ozod|Prokuratura|Jarima", case=False, na=False)
         chora_krilgan_soni = len(d[chora_mask])
 
-        # 4-BLOK ANALITIKASI: Kvartal (Choraklar)
         choraklar = {"I": 0, "II": 0, "III": 0, "IV": 0}
         if 'DT' in d.columns and d['DT'].notnull().any():
             q_counts = d['DT'].dt.quarter.value_counts()
@@ -151,6 +156,8 @@ class DataLoader:
 
         return {
             "total": total,
+            "tg_total": tg_total,
+            "phone_total": phone_total,
             "agentlik_organish": agentlik_org,
             "palata_organish": palata_org,
             "natija_kiritilgan": natija_count,
