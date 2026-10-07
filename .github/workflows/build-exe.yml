@@ -21,25 +21,28 @@ jobs:
       - name: Barcha kerakli kutubxonalarni o'rnatish
         run: |
           python -m pip install --upgrade pip
-          pip install pandas openpyxl customtkinter matplotlib pillow python-docx pyinstaller
+          pip install pandas openpyxl customtkinter pillow python-docx pyinstaller
 
       - name: Rasmiy idoraviy nishon va logotipni hosil qilish
         run: |
           python create_icon.py
 
-      - name: EXE dasturini maxsus logo-icon bilan yig'ish
+      - name: EXE dasturini yig'ish
         run: |
           pyinstaller --noconsole --onefile `
             --icon="assets/app_icon.ico" `
             --add-data "assets;assets" `
-            --copy-metadata pandas `
+            --add-data "src;src" `
+            --hidden-import=src `
+            --hidden-import=src.db_manager `
+            --hidden-import=src.data_loader `
+            --hidden-import=src.report_generator `
+            --hidden-import=src.ui_dashboard `
             --hidden-import=pandas `
             --hidden-import=openpyxl `
             --hidden-import=PIL `
             --hidden-import=docx `
             --collect-all customtkinter `
-            --collect-all pandas `
-            --collect-all openpyxl `
             --collect-all docx `
             --name="Korrupsiya_Monitoring" main.py
 
