@@ -5,7 +5,6 @@ import shutil
 import threading
 from datetime import datetime
 
-# Google Sheets ulanishi uchun
 try:
     import gspread
     from oauth2client.service_account import ServiceAccountCredentials
@@ -69,6 +68,19 @@ class DatabaseManager:
                     fish TEXT, telefon TEXT, telegram_username TEXT
                 )
             """)
+            
+            # FOYDALANUVCHILAR (LOGIN/PAROL) JADVALI
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, role TEXT, active INTEGER DEFAULT 1
+                )
+            """)
+            
+            # Agar bo'sh bo'lsa, asosiy adminni qo'shish
+            cursor.execute("SELECT COUNT(*) FROM users")
+            if cursor.fetchone()[0] == 0:
+                cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("admin", "admin123", "admin"))
+            
             cursor.execute("SELECT COUNT(*) FROM xodimlar")
             if cursor.fetchone()[0] == 0:
                 regions = ["Buxoro viloyati", "Farg'ona viloyati", "Jizzax viloyati", "Namangan viloyati", "Navoiy viloyati", "Qashqadaryo viloyati", "Qoraqalpog'iston Respublikasi", "Samarqand viloyati", "Sirdaryo viloyati", "Surxondaryo viloyati", "Toshkent shahri", "Toshkent viloyati", "Xorazm viloyati"]
@@ -85,6 +97,45 @@ class DatabaseManager:
             for k, v in default_settings.items():
                 cursor.execute("INSERT OR IGNORE INTO sozlamalar (key, val) VALUES (?, ?)", (k, v))
             conn.commit()
+
+    # ================= FOYDALANUVCHILARNI BOSHQARISH =================
+    def check_user_login(self, username, password):
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT role FROM users WHERE username = ? AND password = ? AND active = 1", (username, password))
+            res = cursor.fetchone()
+            return res[0] if res else None
+
+    def get_all_users(self):
+        with self._get_connection() as conn:
+            return pd.read_sql_query("SELECT id, username, password, role FROM users", conn)
+
+    def add_user(self, username, password, role):
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (username, password, role))
+                conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False # Login band
+
+    def update_user(self, user_id, username, password, role):
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?", (username, password, role, user_id))
+                conn.commit()
+            return True
+        except: return False
+
+    def delete_user(self, user_id):
+        if str(user_id) == "1": return False # Asosiy adminni o'chirish mumkin emas
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            conn.commit()
+        return True
 
     # ================= CLOUD API YORDAMCHILARI =================
     def _connect_gsheets(self):
@@ -161,7 +212,7 @@ class DatabaseManager:
             cursor.execute("SELECT * FROM murojaatlar WHERE id = ?", (m_id,))
             return cursor.fetchone()
 
-    # ================= MANTIQ VA ASOSIY FUNKSIYALAR =================
+    # ================= ASOSIY LOKAL MANTIQ VA TRIGGERLAR =================
     def get_settings(self):
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -245,11 +296,4 @@ class DatabaseManager:
             cursor.execute("UPDATE xodimlar SET fish = ?, telefon = ?, telegram_username = ? WHERE id = ?", (fish, telefon, telegram_username, x_id))
             conn.commit()
 
-    def find_xodim_for_region(self, viloyat, masul_str):
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            t_type = "Davlat kadastrlari palatasi" if "palata" in str(masul_str).lower() else "Kadastr agentligi"
-            cursor.execute("SELECT fish, telefon, telegram_username FROM xodimlar WHERE viloyat = ? AND tashkilot_turi = ?", (viloyat, t_type))
-            row = cursor.fetchone()
-            if row: return {"fish": row[0], "telefon": row[1], "username": row[2]}
-            return {"fish": "Noma'lum", "telefon": "", "username": ""}
+    def find_xodim_for_region(self, viloy
