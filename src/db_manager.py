@@ -34,7 +34,7 @@ class DatabaseManager:
         self._init_db()
         self._auto_backup()
         
-        # Bulutga (Google Sheets) ulanishni tekshirish
+        # Bulutga (Google Sheets) ulanish va varaqalarni tayyorlash
         self.client = self._connect_gsheets()
         self.sheet = self._ensure_worksheet_and_headers()
         self.users_sheet = self._ensure_users_worksheet()
@@ -172,7 +172,10 @@ class DatabaseManager:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 for _, row in df.iterrows():
-                    m_id = int(row.get('#', 0))
+                    try:
+                        m_id = int(row.get('#', 0))
+                    except:
+                        continue
                     if m_id <= 9: continue
                     cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
                     exists = cursor.fetchone()
@@ -181,11 +184,22 @@ class DatabaseManager:
                             INSERT INTO murojaatlar (
                                 id, yaratilgan_sana, fish, telefon, viloyat, tuman, yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan, javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi, manba
                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (m_id, str(row.get('Yaratilgan sana', '')), str(row.get('F.I.Sh.', '')), str(row.get('Telefon', '')), str(row.get('Viloyat', '')), str(row.get('Tuman', '')), str(row.get('Yoʻnalish', '')), str(row.get('Aniq_Yonalish', '')), str(row.get('Holat', '')), str(row.get('Murojaat matni', '')), str(row.get('Javob', '')), str(row.get('Javob bergan', '')), str(row.get('Javob sanasi', '')), str(row.get('Ijro_Holati', 'O‘rganishga yuborilgan')), str(row.get('Organish_Natijasi', '')), str(row.get('Biriktirilgan_Fayl', '')), str(row.get('Masul_Komplayens', '')), str(row.get('Chora_Turi', 'Chora ko‘rilmagan')), str(row.get('Manba', 'Telegram bot'))))
+                        """, (
+                            m_id, str(row.get('Yaratilgan sana', '')), str(row.get('F.I.Sh.', '')), str(row.get('Telefon', '')), 
+                            str(row.get('Viloyat', '')), str(row.get('Tuman', '')), str(row.get('Yoʻnalish', '')), str(row.get('Aniq_Yonalish', '')), 
+                            str(row.get('Holat', '')), str(row.get('Murojaat matni', '')), str(row.get('Javob', '')), str(row.get('Javob bergan', '')), 
+                            str(row.get('Javob sanasi', '')), str(row.get('Ijro_Holati', 'O‘rganishga yuborilgan')), str(row.get('Organish_Natijasi', '')), 
+                            str(row.get('Biriktirilgan_Fayl', '')), str(row.get('Masul_Komplayens', '')), str(row.get('Chora_Turi', 'Chora ko‘rilmagan')), str(row.get('Manba', 'Telegram bot'))
+                        ))
                     else:
+                        # Cloud yangilanishlari (agar rahbar yoki boshqalar javob yozgan bo'lsa) lokal bazaga ham tortiladi
                         cursor.execute("""
                             UPDATE murojaatlar SET holat = ?, ijro_holati = ?, organish_natijasi = ?, biriktirilgan_fayl = ?, masul_komplayens = ?, chora_turi = ?, javob = ?, javob_bergan = ?, javob_sanasi = ? WHERE id = ?
-                        """, (str(row.get('Holat', '')), str(row.get('Ijro_Holati', '')), str(row.get('Organish_Natijasi', '')), str(row.get('Biriktirilgan_Fayl', '')), str(row.get('Masul_Komplayens', '')), str(row.get('Chora_Turi', '')), str(row.get('Javob', '')), str(row.get('Javob bergan', '')), str(row.get('Javob sanasi', '')), m_id))
+                        """, (
+                            str(row.get('Holat', '')), str(row.get('Ijro_Holati', '')), str(row.get('Organish_Natijasi', '')), 
+                            str(row.get('Biriktirilgan_Fayl', '')), str(row.get('Masul_Komplayens', '')), str(row.get('Chora_Turi', '')), 
+                            str(row.get('Javob', '')), str(row.get('Javob bergan', '')), str(row.get('Javob sanasi', '')), m_id
+                        ))
                 conn.commit()
         except Exception: 
             pass
@@ -200,7 +214,10 @@ class DatabaseManager:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 for row in records:
-                    u_id = int(row.get('ID', 0))
+                    try:
+                        u_id = int(row.get('ID', 0))
+                    except:
+                        continue
                     username = str(row.get('Username', ''))
                     password = str(row.get('Password', ''))
                     role = str(row.get('Role', ''))
@@ -311,7 +328,7 @@ class DatabaseManager:
         self._sync_single_user_to_cloud(user_id, "DELETED", "", "", 0)
         return True
 
-    # ================= ASOSIY LOKAL MANTIQ VA TRIGGERLAR =================
+    # ================= ASOSIY MANTIQ VA EXCEL IMPORT =================
     def get_settings(self):
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -326,28 +343,47 @@ class DatabaseManager:
             conn.commit()
 
     def sync_excel_data(self, df):
+        """
+        Excel'dan yuklanganda:
+        - FAQAT BAZADA YO'Q BO'LGAN YANGI QATORLARNI qo'shadi va bulutga yuboradi.
+        - Bazada allaqachon mavjud bo'lgan eski qatorlarga (siz qo'lda kiritgan javob va statuslarga) 
+          UMUMAN TEGINMAYDI, shuning uchun yozgan ma'lumotlaringiz o'chib ketmaydi!
+        """
         new_cloud_records = []
         with self._get_connection() as conn:
             cursor = conn.cursor()
             for _, row in df.iterrows():
-                m_id = int(row.get('#', 0))
+                try:
+                    m_id = int(row.get('#', 0))
+                except:
+                    continue
                 if m_id <= 9: continue
+                
                 cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
                 exists = cursor.fetchone()
                 y_str = str(row.get('Yoʻnalish', '')).lower()
                 default_masul = "Davlat kadastrlari palatasi hududiy komplayens xodimi" if 'palata' in y_str else "Kadastr agentligi hududiy komplayens xodimi"
 
+                # Agar bu murojaat bazada umuman bo'lmasa, uni yangi qo'shamiz
                 if not exists:
                     cursor.execute("""
                         INSERT INTO murojaatlar (
                             id, yaratilgan_sana, fish, telefon, viloyat, tuman, yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan, javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi, manba
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'O‘rganishga yuborilgan', '', '', ?, 'Chora ko‘rilmagan', 'Telegram bot')
-                    """, (m_id, str(row.get('Yaratilgan sana', '')), str(row.get('F.I.Sh.', '')), str(row.get('Telefon', '')), str(row.get('Viloyat', '')), str(row.get('Tuman', '')), str(row.get('Yoʻnalish', '')), str(row.get('Aniq_Yonalish', '')), str(row.get('Holat', '')), str(row.get('Murojaat matni', '')), str(row.get('Javob', '')), str(row.get('Javob bergan', '')), str(row.get('Javob sanasi', '')), default_masul))
+                    """, (
+                        m_id, str(row.get('Yaratilgan sana', '')), str(row.get('F.I.Sh.', '')), str(row.get('Telefon', '')), 
+                        str(row.get('Viloyat', '')), str(row.get('Tuman', '')), str(row.get('Yoʻnalish', '')), str(row.get('Aniq_Yonalish', '')), 
+                        str(row.get('Holat', '')), str(row.get('Murojaat matni', '')), str(row.get('Javob', '')), str(row.get('Javob bergan', '')), 
+                        str(row.get('Javob sanasi', '')), default_masul
+                    ))
+                    
                     row_data = self._get_row_by_id(m_id)
                     if row_data: 
                         new_cloud_records.append(row_data)
-                else:
-                    cursor.execute("UPDATE murojaatlar SET holat = ?, javob = ?, javob_bergan = ?, javob_sanasi = ?, aniq_yonalish = ? WHERE id = ?", (str(row.get('Holat', '')), str(row.get('Javob', '')), str(row.get('Javob bergan', '')), str(row.get('Javob sanasi', '')), str(row.get('Aniq_Yonalish', '')), m_id))
+                
+                # Eslatma: Bazada mavjud qatorlar uchun hech qanday UPDATE amalga oshirilmaydi. 
+                # Bu siz kiritgan qo'lda javoblar va ma'lumotlarni 100% xavfsiz saqlaydi!
+                
             conn.commit()
             
         if new_cloud_records: 
