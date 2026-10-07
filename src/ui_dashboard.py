@@ -92,6 +92,13 @@ class DashboardApp(ctk.CTk):
         )
         btn_xodimlar.pack(side="right", padx=4, pady=15)
 
+        btn_phone = ctk.CTkButton(
+            nav, text="📞 + Telefon orqali qabul", width=170, height=34,
+            fg_color="#27AE60", hover_color="#219150", font=ctk.CTkFont(size=11, weight="bold"),
+            command=self.show_add_phone_modal
+        )
+        btn_phone.pack(side="right", padx=4, pady=15)
+
         btn_import = ctk.CTkButton(
             nav, text="📥 Yangi Excel yuklash", width=145, height=34,
             fg_color="#1F4E79", hover_color="#286090", font=ctk.CTkFont(size=11, weight="bold"),
@@ -117,35 +124,38 @@ class DashboardApp(ctk.CTk):
         self.lbl_path.configure(text="Asosiy oyna  /  Tahliliy Dashboard")
         self._clear_container()
 
-        # Filtrlar paneli
         filter_box = ctk.CTkFrame(self.container, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#CBD5E1")
         filter_box.pack(fill="x", pady=(0, 8), padx=2)
 
-        ctk.CTkLabel(filter_box, text="🔍 Qidiruv (Poisk):", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(side="left", padx=(12, 4), pady=7)
-        self.entry_dash_search = ctk.CTkEntry(filter_box, placeholder_text="F.I.Sh, telefon, tuman, kalit so'z...", width=230, font=ctk.CTkFont(size=11))
-        self.entry_dash_search.pack(side="left", padx=4, pady=7)
+        ctk.CTkLabel(filter_box, text="🔍 Qidiruv:", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(side="left", padx=(10, 2), pady=7)
+        self.entry_dash_search = ctk.CTkEntry(filter_box, placeholder_text="F.I.Sh, telefon, kalit so'z...", width=180, font=ctk.CTkFont(size=11))
+        self.entry_dash_search.pack(side="left", padx=2, pady=7)
         self.entry_dash_search.bind("<Return>", self._apply_filters)
 
-        btn_search = ctk.CTkButton(filter_box, text="Topish", width=60, height=28, fg_color="#0F2537", hover_color="#1E3A56", font=ctk.CTkFont(size=11, weight="bold"), command=self._apply_filters)
-        btn_search.pack(side="left", padx=4, pady=7)
+        btn_search = ctk.CTkButton(filter_box, text="Topish", width=55, height=28, fg_color="#0F2537", hover_color="#1E3A56", font=ctk.CTkFont(size=11, weight="bold"), command=self._apply_filters)
+        btn_search.pack(side="left", padx=2, pady=7)
 
-        ctk.CTkLabel(filter_box, text="⏳ Davr / Yil:", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(side="left", padx=(12, 4), pady=7)
+        ctk.CTkLabel(filter_box, text="⏳ Davr:", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(side="left", padx=(8, 2), pady=7)
         period_values = self.loader.get_available_periods()
-        self.cb_period = ctk.CTkComboBox(filter_box, values=period_values, command=self._apply_filters, width=125, font=ctk.CTkFont(size=11))
+        self.cb_period = ctk.CTkComboBox(filter_box, values=period_values, command=self._apply_filters, width=115, font=ctk.CTkFont(size=11))
         current_selection = getattr(self, 'selected_period', 'Barchasi')
-        if current_selection not in period_values:
-            current_selection = 'Barchasi'
+        if current_selection not in period_values: current_selection = 'Barchasi'
         self.cb_period.set(current_selection)
-        self.cb_period.pack(side="left", padx=4, pady=7)
+        self.cb_period.pack(side="left", padx=2, pady=7)
 
-        ctk.CTkLabel(filter_box, text="🏢 Mas'ul organ:", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(side="left", padx=(12, 4), pady=7)
+        ctk.CTkLabel(filter_box, text="📡 Manba:", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(side="left", padx=(8, 2), pady=7)
+        self.cb_manba = ctk.CTkComboBox(filter_box, values=["Barchasi", "Telegram bot", "Ishonch telefoni (+998-71-273-19-66)"], command=self._apply_filters, width=220, font=ctk.CTkFont(size=11))
+        self.cb_manba.set(getattr(self, 'selected_manba', 'Barchasi'))
+        self.cb_manba.pack(side="left", padx=2, pady=7)
+
+        ctk.CTkLabel(filter_box, text="🏢 Mas'ul:", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(side="left", padx=(8, 2), pady=7)
         masul_options = ["Barchasi", "Kadastr agentligi hududiy komplayens xodimi", "Davlat kadastrlari palatasi hududiy komplayens xodimi"]
-        self.cb_masul = ctk.CTkComboBox(filter_box, values=masul_options, command=self._apply_filters, width=260, font=ctk.CTkFont(size=11))
+        self.cb_masul = ctk.CTkComboBox(filter_box, values=masul_options, command=self._apply_filters, width=220, font=ctk.CTkFont(size=11))
         self.cb_masul.set(getattr(self, 'selected_masul', 'Barchasi'))
-        self.cb_masul.pack(side="left", padx=4, pady=7)
+        self.cb_masul.pack(side="left", padx=2, pady=7)
 
-        btn_reset = ctk.CTkButton(filter_box, text="Tozalash", width=65, height=28, fg_color="#64748B", hover_color="#475569", font=ctk.CTkFont(size=11), command=self._reset_filters)
-        btn_reset.pack(side="left", padx=8, pady=7)
+        btn_reset = ctk.CTkButton(filter_box, text="Tozalash", width=60, height=28, fg_color="#64748B", hover_color="#475569", font=ctk.CTkFont(size=11), command=self._reset_filters)
+        btn_reset.pack(side="left", padx=6, pady=7)
 
         # KPI Kartochkalari
         cards_frame = ctk.CTkFrame(self.container, fg_color="transparent")
@@ -179,7 +189,7 @@ class DashboardApp(ctk.CTk):
         table_frame = ctk.CTkFrame(table_container, fg_color="transparent")
         table_frame.pack(fill="both", expand=True, padx=12, pady=(0, 8))
 
-        cols = ("viloyat", "jami", "agentlik_org", "palata_org", "hal_etilgan", "asossiz")
+        cols = ("viloyat", "jami", "tg_m", "tel_m", "agentlik_org", "palata_org", "hal_etilgan")
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("Dash.Treeview", rowheight=27, font=("Calibri", 11), bordercolor="#94A3B8", borderwidth=1)
@@ -187,18 +197,20 @@ class DashboardApp(ctk.CTk):
 
         self.dash_tree = ttk.Treeview(table_frame, columns=cols, show="headings", style="Dash.Treeview", selectmode="browse")
         self.dash_tree.heading("viloyat", text="Hudud nomi (Viloyat)")
-        self.dash_tree.heading("jami", text="Jami murojaat")
-        self.dash_tree.heading("agentlik_org", text="Agentlikda o‘rganishda")
-        self.dash_tree.heading("palata_org", text="Palatada o‘rganishda")
-        self.dash_tree.heading("hal_etilgan", text="O‘rganib chiqilgan")
-        self.dash_tree.heading("asossiz", text="Asossiz deb topilgan")
+        self.dash_tree.heading("jami", text="Jami")
+        self.dash_tree.heading("tg_m", text="Telegram bot")
+        self.dash_tree.heading("tel_m", text="Ishonch telefoni")
+        self.dash_tree.heading("agentlik_org", text="Agentlikda")
+        self.dash_tree.heading("palata_org", text="Palatada")
+        self.dash_tree.heading("hal_etilgan", text="O‘rganilgan")
 
-        self.dash_tree.column("viloyat", width=250)
-        self.dash_tree.column("jami", width=110, anchor="center")
-        self.dash_tree.column("agentlik_org", width=160, anchor="center")
-        self.dash_tree.column("palata_org", width=160, anchor="center")
-        self.dash_tree.column("hal_etilgan", width=150, anchor="center")
-        self.dash_tree.column("asossiz", width=140, anchor="center")
+        self.dash_tree.column("viloyat", width=220)
+        self.dash_tree.column("jami", width=90, anchor="center")
+        self.dash_tree.column("tg_m", width=110, anchor="center")
+        self.dash_tree.column("tel_m", width=120, anchor="center")
+        self.dash_tree.column("agentlik_org", width=140, anchor="center")
+        self.dash_tree.column("palata_org", width=140, anchor="center")
+        self.dash_tree.column("hal_etilgan", width=130, anchor="center")
 
         vsb = ttk.Scrollbar(table_frame, orient="vertical", command=self.dash_tree.yview)
         self.dash_tree.configure(yscrollcommand=vsb.set)
@@ -213,14 +225,15 @@ class DashboardApp(ctk.CTk):
 
         for idx, (reg, group) in enumerate(reg_groups):
             c_tot = len(group)
+            c_tg = len(group[group['Manba'].astype(str).str.contains('Telegram', case=False, na=False)])
+            c_tel = len(group[group['Manba'].astype(str).str.contains('Telefon|273-19-66', case=False, na=False)])
             is_org = group['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)
             c_ag = len(group[is_org & group['Masul_Komplayens'].astype(str).str.contains("agentligi", case=False, na=False)])
             c_pa = len(group[is_org & group['Masul_Komplayens'].astype(str).str.contains("palata", case=False, na=False)])
             c_hal = len(group[group['Ijro_Holati'].astype(str).str.contains("Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora|O‘rganib chiqildi", case=False, na=False)])
-            c_as = len(group[group['Ijro_Holati'].astype(str).str.contains("Asossiz", case=False, na=False)])
 
             tag = 'even' if idx % 2 == 0 else 'odd'
-            self.dash_tree.insert("", "end", values=(reg, f"{c_tot} ta", f"{c_ag} ta", f"{c_pa} ta", f"{c_hal} ta", f"{c_as} ta"), tags=(tag,))
+            self.dash_tree.insert("", "end", values=(reg, f"{c_tot} ta", f"{c_tg} ta", f"{c_tel} ta", f"{c_ag} ta", f"{c_pa} ta", f"{c_hal} ta"), tags=(tag,))
 
         def on_region_open(event):
             sel = self.dash_tree.selection()
@@ -230,11 +243,10 @@ class DashboardApp(ctk.CTk):
 
         self.dash_tree.bind("<Double-1>", on_region_open)
 
-        # ================= PASTKI 4 TA ANALITIK BLOK (BOSILADIGAN VA ICHIGA KIRILADIGAN QILINGAN) =================
+        # PASTKI 4 TA ANALITIK BLOK
         bottom_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         bottom_frame.pack(fill="x", pady=(0, 2))
 
-        # Funksiyalar (ichiga kirish filtratsiyasi)
         now_date = datetime.now()
         is_org_mask = f_df['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)
 
@@ -266,58 +278,50 @@ class DashboardApp(ctk.CTk):
                 sub = f_df[f_df['DT'].dt.quarter == q_num]
                 self.show_records_view(f"{q_num}-chorak murojaatlari", sub)
 
-        # 1-BLOK: IJRO MUDDATI NAZORATI
+        # 1-BLOK
         b1 = ctk.CTkFrame(bottom_frame, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#E2E8F0")
         b1.grid(row=0, column=0, padx=3, sticky="nsew")
         ctk.CTkLabel(b1, text="⏱ IJRO MUDDATI NAZORATI", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(4, 2))
-
         btn_sla1 = ctk.CTkButton(b1, text=f"🔴 Muddati o‘tgan (>15 kun): {stats['muddati_otgan_15']} ta ➔", 
                                  fg_color="#FDF2F2", text_color="#C0392B", hover_color="#FDE8E8", 
                                  font=ctk.CTkFont(size=11, weight="bold"), height=24, anchor="w", command=open_muddati_otgan)
         btn_sla1.pack(fill="x", padx=8, pady=2)
-
         btn_sla2 = ctk.CTkButton(b1, text=f"🟡 Ogohlantirish (10-15 kun): {stats['ogohlantirish_10']} ta ➔", 
                                  fg_color="#FEF9E7", text_color="#D35400", hover_color="#FCF3CF", 
                                  font=ctk.CTkFont(size=11, weight="bold"), height=24, anchor="w", command=open_ogohlantirish)
         btn_sla2.pack(fill="x", padx=8, pady=2)
-        ctk.CTkLabel(b1, text="Muddati buzilganlarni ko'rish uchun bosing", font=ctk.CTkFont(size=9, slant="italic"), text_color="#7F8C8D").pack(pady=(0, 4))
 
-        # 2-BLOK: TAKRORIY MUROJAATLAR
+        # 2-BLOK
         b2 = ctk.CTkFrame(bottom_frame, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#E2E8F0")
         b2.grid(row=0, column=1, padx=3, sticky="nsew")
         ctk.CTkLabel(b2, text="🔄 TAKRORIY MUROJAATLAR", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(4, 2))
-
         btn_dup = ctk.CTkButton(b2, text=f"Takroriy kelganlar: {stats['takroriy_soni']} ta ➔", 
                                 fg_color="#EBF5FB", text_color="#2980B9", hover_color="#D4E6F1", 
                                 font=ctk.CTkFont(size=12, weight="bold"), height=30, command=open_takroriy)
         btn_dup.pack(fill="x", padx=12, pady=5)
-        ctk.CTkLabel(b2, text="Bitta raqamdan qayta yozganlar ro'yxati", font=ctk.CTkFont(size=9, slant="italic"), text_color="#7F8C8D").pack(pady=(0, 4))
+        ctk.CTkLabel(b2, text="Bitta raqamdan qayta arizalar", font=ctk.CTkFont(size=9, slant="italic"), text_color="#7F8C8D").pack(pady=(0, 4))
 
-        # 3-BLOK: INTIZOMIY CHORALAR
+        # 3-BLOK
         b3 = ctk.CTkFrame(bottom_frame, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#E2E8F0")
         b3.grid(row=0, column=2, padx=3, sticky="nsew")
         ctk.CTkLabel(b3, text="⚖️ INTIZOMIY CHORALAR", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(4, 2))
-
         btn_cho = ctk.CTkButton(b3, text=f"Ko‘rilgan choralar: {stats['chora_krilgan_soni']} ta ➔", 
                                 fg_color="#EAFAF1", text_color="#27AE60", hover_color="#D5F5E3", 
                                 font=ctk.CTkFont(size=12, weight="bold"), height=30, command=open_choralar)
         btn_cho.pack(fill="x", padx=12, pady=5)
-        ctk.CTkLabel(b3, text="Xayfsan, jarima, ozod etilganlar", font=ctk.CTkFont(size=9, slant="italic"), text_color="#7F8C8D").pack(pady=(0, 4))
+        ctk.CTkLabel(b3, text="Xayfsan, jarima, lavozimdan ozod", font=ctk.CTkFont(size=9, slant="italic"), text_color="#7F8C8D").pack(pady=(0, 4))
 
-        # 4-BLOK: CHORAKLAR TAHLILI (KVARTAL)
+        # 4-BLOK
         b4 = ctk.CTkFrame(bottom_frame, fg_color="#FFFFFF", corner_radius=6, border_width=1, border_color="#E2E8F0")
         b4.grid(row=0, column=3, padx=3, sticky="nsew")
         ctk.CTkLabel(b4, text="📅 CHORAKLAR (KVARTAL)", font=ctk.CTkFont(size=11, weight="bold"), text_color="#0F2537").pack(pady=(4, 2))
-
         q_frame = ctk.CTkFrame(b4, fg_color="transparent")
         q_frame.pack(fill="x", padx=6, pady=2)
-
         q = stats['chorak_taqsimot']
-        ctk.CTkButton(q_frame, text=f"I-ch: {q['I']}", width=50, height=24, fg_color="#F4F6F7", text_color="#1F4E79", hover_color="#E5E8E8", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(1)).pack(side="left", padx=2)
-        ctk.CTkButton(q_frame, text=f"II-ch: {q['II']}", width=50, height=24, fg_color="#F4F6F7", text_color="#1F4E79", hover_color="#E5E8E8", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(2)).pack(side="left", padx=2)
-        ctk.CTkButton(q_frame, text=f"III-ch: {q['III']}", width=55, height=24, fg_color="#D4E6F1", text_color="#1F4E79", hover_color="#A9CCE3", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(3)).pack(side="left", padx=2)
-        ctk.CTkButton(q_frame, text=f"IV-ch: {q['IV']}", width=50, height=24, fg_color="#F4F6F7", text_color="#1F4E79", hover_color="#E5E8E8", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(4)).pack(side="left", padx=2)
-
+        ctk.CTkButton(q_frame, text=f"I-ch: {q['I']}", width=50, height=24, fg_color="#F4F6F7", text_color="#1F4E79", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(1)).pack(side="left", padx=2)
+        ctk.CTkButton(q_frame, text=f"II-ch: {q['II']}", width=50, height=24, fg_color="#F4F6F7", text_color="#1F4E79", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(2)).pack(side="left", padx=2)
+        ctk.CTkButton(q_frame, text=f"III-ch: {q['III']}", width=55, height=24, fg_color="#D4E6F1", text_color="#1F4E79", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(3)).pack(side="left", padx=2)
+        ctk.CTkButton(q_frame, text=f"IV-ch: {q['IV']}", width=50, height=24, fg_color="#F4F6F7", text_color="#1F4E79", font=ctk.CTkFont(size=10, weight="bold"), command=lambda: open_quarter(4)).pack(side="left", padx=2)
         ctk.CTkLabel(b4, text="Chorakni tanlab arizalarni oching", font=ctk.CTkFont(size=9, slant="italic"), text_color="#7F8C8D").pack(pady=(0, 4))
 
         for col_idx in range(4):
@@ -326,16 +330,17 @@ class DashboardApp(ctk.CTk):
     def _apply_filters(self, _=None):
         self.selected_period = self.cb_period.get()
         self.selected_masul = self.cb_masul.get()
+        self.selected_manba = self.cb_manba.get()
         search_txt = self.entry_dash_search.get().strip() if hasattr(self, 'entry_dash_search') else ""
-        self.loader.filter_data(period=self.selected_period, masul=self.selected_masul, search_query=search_txt)
+        self.loader.filter_data(period=self.selected_period, masul=self.selected_masul, manba=self.selected_manba, search_query=search_txt)
         self.show_dashboard_view()
 
     def _reset_filters(self):
         self.selected_period = "Barchasi"
         self.selected_masul = "Barchasi"
-        if hasattr(self, 'entry_dash_search'):
-            self.entry_dash_search.delete(0, 'end')
-        self.loader.filter_data("Barchasi", "Barchasi", "")
+        self.selected_manba = "Barchasi"
+        if hasattr(self, 'entry_dash_search'): self.entry_dash_search.delete(0, 'end')
+        self.loader.filter_data("Barchasi", "Barchasi", "Barchasi", "")
         self.show_dashboard_view()
 
     def _drill_down_region(self, reg_name):
@@ -355,8 +360,8 @@ class DashboardApp(ctk.CTk):
         top_bar = ctk.CTkFrame(main_box, fg_color="transparent")
         top_bar.pack(fill="x", padx=15, pady=8)
 
-        ctk.CTkLabel(top_bar, text="🔍 Tezkor qidiruv:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#0F2537").pack(side="left", padx=(0, 5))
-        entry_search = ctk.CTkEntry(top_bar, placeholder_text="F.I.Sh, telefon, tuman, matn kalit so'zi...", width=320, font=ctk.CTkFont(size=12))
+        ctk.CTkLabel(top_bar, text="🔍 Qidiruv:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#0F2537").pack(side="left", padx=(0, 5))
+        entry_search = ctk.CTkEntry(top_bar, placeholder_text="F.I.Sh, telefon, tuman, matn...", width=320, font=ctk.CTkFont(size=12))
         entry_search.pack(side="left", padx=5)
 
         lbl_count = ctk.CTkLabel(top_bar, text=f"Jami: {len(data_df)} ta", font=ctk.CTkFont(size=13, weight="bold"), text_color="#0F2537")
@@ -365,15 +370,16 @@ class DashboardApp(ctk.CTk):
         tree_frame = ctk.CTkFrame(main_box, fg_color="transparent")
         tree_frame.pack(fill="both", expand=True, padx=15, pady=(0, 6))
 
-        cols = ("#", "sana", "fish", "telefon", "viloyat", "tuman", "masul", "ijro")
+        cols = ("#", "sana", "manba", "fish", "telefon", "viloyat", "tuman", "masul", "ijro")
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("Rec.Treeview", rowheight=28, font=("Calibri", 11), bordercolor="#94A3B8", borderwidth=1)
-        style.configure("Rec.Treeview.Heading", font=("Calibri", 11, "bold"), background="#0F2537", foreground="#FFFFFF", bordercolor="#475569", borderwidth=1)
+        style.configure("Rec.Treeview.Heading", font=("Calibri", 11, "bold"), background="#0F2537", foreground="#FFFFFF")
 
         tree = ttk.Treeview(tree_frame, columns=cols, show="headings", style="Rec.Treeview", selectmode="browse")
         tree.heading("#", text="#")
         tree.heading("sana", text="Sana")
+        tree.heading("manba", text="Manba")
         tree.heading("fish", text="F.I.Sh.")
         tree.heading("telefon", text="Telefon")
         tree.heading("viloyat", text="Viloyat")
@@ -383,12 +389,13 @@ class DashboardApp(ctk.CTk):
 
         tree.column("#", width=45, anchor="center")
         tree.column("sana", width=125, anchor="center")
-        tree.column("fish", width=160)
-        tree.column("telefon", width=110, anchor="center")
-        tree.column("viloyat", width=120)
-        tree.column("tuman", width=120)
-        tree.column("masul", width=250)
-        tree.column("ijro", width=140, anchor="center")
+        tree.column("manba", width=140, anchor="center")
+        tree.column("fish", width=150)
+        tree.column("telefon", width=105, anchor="center")
+        tree.column("viloyat", width=115)
+        tree.column("tuman", width=115)
+        tree.column("masul", width=220)
+        tree.column("ijro", width=130, anchor="center")
 
         vsb = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=vsb.set)
@@ -403,7 +410,7 @@ class DashboardApp(ctk.CTk):
             for idx, (_, r) in enumerate(df_to_show.iterrows()):
                 tag = 'even' if idx % 2 == 0 else 'odd'
                 tree.insert("", "end", values=(
-                    r.get('#'), str(r.get('Yaratilgan sana'))[:16], r.get('F.I.Sh.'),
+                    r.get('#'), str(r.get('Yaratilgan sana'))[:16], r.get('Manba', 'Telegram bot'), r.get('F.I.Sh.'),
                     r.get('Telefon'), r.get('Viloyat'), r.get('Tuman'),
                     r.get('Masul_Komplayens', 'Kadastr agentligi hududiy komplayens xodimi'), r.get('Ijro_Holati', 'O‘rganishga yuborilgan')
                 ), tags=(tag,))
@@ -412,8 +419,7 @@ class DashboardApp(ctk.CTk):
 
         def on_search(event):
             q = entry_search.get().lower().strip()
-            if not q:
-                populate(data_df)
+            if not q: populate(data_df)
             else:
                 m = data_df['F.I.Sh.'].astype(str).str.lower().str.contains(q) | \
                     data_df['Telefon'].astype(str).str.lower().str.contains(q) | \
@@ -432,9 +438,9 @@ class DashboardApp(ctk.CTk):
             self.show_detail_view(m_id, lambda: self.show_records_view(title, data_df))
 
         tree.bind("<Double-1>", on_open)
-        ctk.CTkLabel(main_box, text="💡 Murojaat ichiga kirish, o'rganish natijasi, hujjat va Telegramga yo'naltirish uchun qator ustiga ikki marta bosing.", font=ctk.CTkFont(size=11, slant="italic")).pack(pady=4)
+        ctk.CTkLabel(main_box, text="💡 Murojaat ichiga kirish, o'rganish natijasi, hujjat va Word topshiriq xati uchun qator ustiga ikki marta bosing.", font=ctk.CTkFont(size=11, slant="italic")).pack(pady=4)
 
-    # ================= 3-POG'ONA: KARTOCHKA VA TELEGRAM =================
+    # ================= 3-POG'ONA: KARTOCHKA VA WORD TOPSHIRIQ =================
     def show_detail_view(self, m_id, return_callback):
         self.view_stack.append(return_callback)
         self.btn_back.configure(state="normal")
@@ -450,22 +456,16 @@ class DashboardApp(ctk.CTk):
         info_top.pack(fill="x", padx=15, pady=(10, 6))
 
         txt_info = f"👤 Fuqaro: {rec.get('F.I.Sh.')}   |   📞 Tel: {rec.get('Telefon')}   |   📍 Hudud: {rec.get('Viloyat')}, {rec.get('Tuman')}\n" \
-                   f"🏢 Yo'nalish: {rec.get('Yoʻnalish')}\n🕒 Kelib tushgan sana: {rec.get('Yaratilgan sana')}"
+                   f"📡 Manba: {rec.get('Manba', 'Telegram bot')}   |   🏢 Yo'nalish: {rec.get('Yoʻnalish')}\n🕒 Kelib tushgan sana: {rec.get('Yaratilgan sana')}"
         ctk.CTkLabel(info_top, text=txt_info, justify="left", font=ctk.CTkFont(size=13, weight="bold"), text_color="#0F2537").pack(padx=15, pady=8, anchor="w")
 
         ctk.CTkLabel(main_scroll, text="📝 Murojaat matni (to‘liq shaklda):", font=ctk.CTkFont(size=13, weight="bold"), text_color="#0F2537").pack(padx=15, anchor="w")
-        tb_m = ctk.CTkTextbox(main_scroll, height=180, wrap="word", font=ctk.CTkFont(size=13))
+        tb_m = ctk.CTkTextbox(main_scroll, height=170, wrap="word", font=ctk.CTkFont(size=13))
         tb_m.insert("1.0", str(rec.get('Murojaat matni', '')))
         tb_m.configure(state="disabled")
         tb_m.pack(fill="x", padx=15, pady=(4, 8))
 
-        ctk.CTkLabel(main_scroll, text="✉️ Bot orqali fuqaroga yuborilgan rasmiy javob:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#0F2537").pack(padx=15, anchor="w")
-        tb_j = ctk.CTkTextbox(main_scroll, height=55, wrap="word", font=ctk.CTkFont(size=12))
-        rasmiy_javob_shablon = "Ассалому алайкум, ҳурматли фуқаро. Сизнинг мурожаатингиз бўйича ҳолатларга аниқлик киритиш мақсадида Коррупцияга қарши курашиш бўлими ходимлари телефон рақамингиз орқали Сиз билан боғланади."
-        tb_j.insert("1.0", rasmiy_javob_shablon)
-        tb_j.configure(state="disabled")
-        tb_j.pack(fill="x", padx=15, pady=(4, 8))
-
+        # Komplayens nazorat bo'limi
         action_frame = ctk.CTkFrame(main_scroll, fg_color="#F8FAFC", corner_radius=6, border_width=1, border_color="#CBD5E1")
         action_frame.pack(fill="x", padx=15, pady=(4, 10))
 
@@ -478,46 +478,56 @@ class DashboardApp(ctk.CTk):
         cb_masul_item = ctk.CTkComboBox(
             row_masul, 
             values=["Kadastr agentligi hududiy komplayens xodimi", "Davlat kadastrlari palatasi hududiy komplayens xodimi"], 
-            width=320, font=ctk.CTkFont(size=12)
+            width=300, font=ctk.CTkFont(size=12)
         )
         cur_masul = str(rec.get('Masul_Komplayens', ''))
         cb_masul_item.set("Davlat kadastrlari palatasi hududiy komplayens xodimi" if 'palata' in cur_masul.lower() else "Kadastr agentligi hududiy komplayens xodimi")
         cb_masul_item.pack(side="left")
 
-        def send_to_telegram():
-            v_name = rec.get('Viloyat')
-            m_org = cb_masul_item.get()
-            x_info = self.loader.db.find_xodim_for_region(v_name, m_org)
-            
-            tg_text = (
-                f"⚡️ KORRUPSIYAGA QARSHI KOMPLAYENS MONITORING\n"
-                f"📌 Murojaat #{m_id}\n"
-                f"👤 Fuqaro: {rec.get('F.I.Sh.')}\n"
-                f"📞 Tel: {rec.get('Telefon')}\n"
-                f"📍 Hudud: {rec.get('Viloyat')}, {rec.get('Tuman')}\n"
-                f"🕒 Sana: {rec.get('Yaratilgan sana')}\n\n"
-                f"📝 Murojaat mazmuni:\n{str(rec.get('Murojaat matni'))[:500]}...\n\n"
-                f"⚠️ O'rganish va bartaraf etish uchun qabul qiling!"
-            )
-            encoded = urllib.parse.quote(tg_text)
-            
-            u_name = str(x_info.get('username', '')).strip().replace('@', '')
-            u_phone = str(x_info.get('telefon', '')).strip().replace('+', '')
-            
-            if u_name:
-                url = f"https://t.me/{u_name}?text={encoded}"
-            elif u_phone:
-                url = f"https://t.me/+{u_phone}?text={encoded}"
-            else:
-                url = f"https://t.me/share/url?url={encoded}"
-            webbrowser.open(url)
+        # AVTOMATIK WORD TOPSHIRIQ XATI VA TELEGRAMGA YO'NALTIRISH
+        def generate_and_send_task():
+            try:
+                task_dir = os.path.join("data", "topshiriqlar")
+                os.makedirs(task_dir, exist_ok=True)
+                task_file = os.path.join(task_dir, f"Topshiriq_{m_id}_{rec.get('Viloyat')}.docx")
+                ReportGenerator.generate_task_document(rec, task_file)
 
-        btn_tg = ctk.CTkButton(
-            row_masul, text="✈️ Xodimga Telegramdan yuborish", width=190, height=28,
+                # Windowsda fayl turgan papkani ochib berish
+                os.system(f'explorer /select,"{os.path.abspath(task_file)}"')
+
+                # Telegramni ochish
+                v_name = rec.get('Viloyat')
+                m_org = cb_masul_item.get()
+                x_info = self.loader.db.find_xodim_for_region(v_name, m_org)
+
+                tg_text = (
+                    f"⚡️ KORRUPSIYAGA QARSHI KOMPLAYENS NAZORAT\n"
+                    f"📌 Topshiriq xati № {m_id}\n"
+                    f"📡 Manba: {rec.get('Manba', 'Telegram bot')}\n"
+                    f"👤 Fuqaro: {rec.get('F.I.Sh.')} (Tel: {rec.get('Telefon')})\n"
+                    f"📍 Hudud: {rec.get('Viloyat')}, {rec.get('Tuman')}\n"
+                    f"🕒 Sana: {rec.get('Yaratilgan sana')}\n\n"
+                    f"📄 Rasmiy topshiriq Word fayli shakllantirildi. Belgilangan muddatda o‘rganib xulosa taqdim eting!"
+                )
+                encoded = urllib.parse.quote(tg_text)
+                u_name = str(x_info.get('username', '')).strip().replace('@', '')
+                u_phone = str(x_info.get('telefon', '')).strip().replace('+', '')
+                
+                if u_name: url = f"https://t.me/{u_name}?text={encoded}"
+                elif u_phone: url = f"https://t.me/+{u_phone}?text={encoded}"
+                else: url = f"https://t.me/share/url?url={encoded}"
+                webbrowser.open(url)
+
+                messagebox.showinfo("Topshiriq xati tayyor", f"Topshiriq Word fayli yaratildi va tanlandi:\n{task_file}\n\nUshbu faylni Telegram orqali xodimga yuborishingiz mumkin.")
+            except Exception as e:
+                messagebox.showerror("Xatolik", f"Topshiriq xatini yaratishda xato: {str(e)}")
+
+        btn_task = ctk.CTkButton(
+            row_masul, text="📄 Word Topshiriq xati + Telegram ➔", width=220, height=28,
             fg_color="#0088CC", hover_color="#0077B5", font=ctk.CTkFont(size=11, weight="bold"),
-            command=send_to_telegram
+            command=generate_and_send_task
         )
-        btn_tg.pack(side="left", padx=10)
+        btn_task.pack(side="left", padx=10)
 
         row_status = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_status.pack(fill="x", padx=15, pady=3)
@@ -526,16 +536,16 @@ class DashboardApp(ctk.CTk):
         cb_status = ctk.CTkComboBox(
             row_status, 
             values=["O‘rganishga yuborilgan", "O‘rganib chiqildi / Bartaraf etildi", "Ijobiy hal etildi", "Intizomiy chora ko‘rildi", "Asossiz deb topildi"], 
-            width=240, font=ctk.CTkFont(size=12)
+            width=230, font=ctk.CTkFont(size=12)
         )
         cb_status.set(str(rec.get('Ijro_Holati', 'O‘rganishga yuborilgan')))
         cb_status.pack(side="left", padx=(0, 15))
 
-        ctk.CTkLabel(row_status, text="Ko‘rilgan chora turi:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(row_status, text="Ko‘rilgan chora:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 8))
         cb_chora = ctk.CTkComboBox(
             row_status, 
             values=["Chora ko‘rilmagan", "Xayfsan e'lon qilindi", "Jarima qo‘llandi", "Lavozimidan ozod etildi", "Prokuraturaga yuborildi"], 
-            width=200, font=ctk.CTkFont(size=12)
+            width=190, font=ctk.CTkFont(size=12)
         )
         cb_chora.set(str(rec.get('Chora_Turi', 'Chora ko‘rilmagan')))
         cb_chora.pack(side="left")
@@ -546,19 +556,16 @@ class DashboardApp(ctk.CTk):
         tb_natija.pack(fill="x", padx=15, pady=(0, 6))
 
         self.attached_file_path = str(rec.get('Biriktirilgan_Fayl', ''))
-
         file_box = ctk.CTkFrame(action_frame, fg_color="#FFFFFF", corner_radius=5, border_width=1, border_color="#CBD5E1")
         file_box.pack(fill="x", padx=15, pady=(0, 8))
 
         self.lbl_file_status = ctk.CTkLabel(
-            file_box, 
-            text=f"📁 Biriktirilgan hujjat: {os.path.basename(self.attached_file_path)}" if self.attached_file_path else "📁 Biriktirilgan hujjat: Yo'q",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            text_color="#0F2537" if self.attached_file_path else "#64748B"
+            file_box, text=f"📁 Biriktirilgan hujjat: {os.path.basename(self.attached_file_path)}" if self.attached_file_path else "📁 Biriktirilgan hujjat: Yo'q",
+            font=ctk.CTkFont(size=12, weight="bold"), text_color="#0F2537" if self.attached_file_path else "#64748B"
         )
         self.lbl_file_status.pack(side="left", padx=12, pady=6)
 
-        btn_attach = ctk.CTkButton(file_box, text="📎 Hujjat yuklash", width=130, height=26, fg_color="#1E3A56", hover_color="#2A4D73", font=ctk.CTkFont(size=11, weight="bold"), command=self._attach_file)
+        btn_attach = ctk.CTkButton(file_box, text="📎 Hujjat yuklash", width=120, height=26, fg_color="#1E3A56", hover_color="#2A4D73", font=ctk.CTkFont(size=11, weight="bold"), command=self._attach_file)
         btn_attach.pack(side="right", padx=8, pady=4)
 
         btn_open_file = ctk.CTkButton(file_box, text="👁 Ko'rish", width=70, height=26, fg_color="#475569", hover_color="#334155", font=ctk.CTkFont(size=11, weight="bold"), command=self._open_attached_file)
@@ -571,7 +578,7 @@ class DashboardApp(ctk.CTk):
             nat = tb_natija.get("1.0", "end-1c")
             self.loader.db.update_murojaat_ijro(m_id, st, nat, self.attached_file_path, ms, ch)
             self.loader.refresh_data()
-            messagebox.showinfo("Saqlandi", f"#{m_id} sonli murojaat bo‘yicha mas’ul xodim, o‘rganish natijasi va ko'rilgan chora saqlandi!")
+            messagebox.showinfo("Saqlandi", f"#{m_id} sonli murojaat ijrosi muvaffaqiyatli saqlandi!")
 
         btn_save = ctk.CTkButton(action_frame, text="💾 Saqlash", fg_color="#1B5E20", hover_color="#2E7D32", width=130, height=32, font=ctk.CTkFont(size=12, weight="bold"), command=save_changes)
         btn_save.pack(pady=(0, 6))
@@ -589,14 +596,89 @@ class DashboardApp(ctk.CTk):
 
     def _open_attached_file(self):
         if self.attached_file_path and os.path.exists(self.attached_file_path):
-            try:
-                os.startfile(self.attached_file_path)
-            except Exception as e:
-                messagebox.showerror("Xatolik", f"Faylni ochishda xato: {str(e)}")
+            try: os.startfile(self.attached_file_path)
+            except Exception as e: messagebox.showerror("Xatolik", f"Faylni ochishda xato: {str(e)}")
         else:
             messagebox.showwarning("Fayl yo'q", "Ushbu murojaatga hali hech qanday hujjat biriktirilmagan!")
 
-    # ================= 4-POG'ONA: HUDUDIY XODIMLAR MA'LUMOTNOMASI =================
+    # ================= 4-POG'ONA: TELEFON ORQALI QABUL QILISH MODAL OYNASI =================
+    def show_add_phone_modal(self):
+        modal = ctk.CTkToplevel(self)
+        modal.title("Ishonch telefoni orqali murojaatni ro'yxatga olish (+998-71-273-19-66)")
+        modal.geometry("640x620")
+        modal.grab_set()
+
+        ctk.CTkLabel(modal, text="📞 ISHONCH TELEFONI ORQALI MUROJAAT QABUL QILISH", font=ctk.CTkFont(size=14, weight="bold"), text_color="#0F2537").pack(pady=(15, 5))
+        ctk.CTkLabel(modal, text="Ishonch raqami: +998-71-273-19-66 | Kelib tushgan vaqt: Avtomatik", font=ctk.CTkFont(size=11, slant="italic"), text_color="#64748B").pack(pady=(0, 10))
+
+        form = ctk.CTkFrame(modal, fg_color="#F8FAFC", corner_radius=6, border_width=1, border_color="#CBD5E1")
+        form.pack(fill="both", expand=True, padx=20, pady=(0, 15))
+
+        # 1. Fuqaro F.I.Sh.
+        ctk.CTkLabel(form, text="Fuqaro F.I.Sh.:", font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=15, pady=(8, 2))
+        e_fish = ctk.CTkEntry(form, placeholder_text="Familiyasi Ismi Otasining ismi", width=400)
+        e_fish.pack(fill="x", padx=15)
+
+        # 2. Telefon raqami
+        ctk.CTkLabel(form, text="Telefon raqami:", font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=15, pady=(6, 2))
+        e_tel = ctk.CTkEntry(form, placeholder_text="+998901234567", width=400)
+        e_tel.insert(0, "+998")
+        e_tel.pack(fill="x", padx=15)
+
+        # 3. Viloyat va Tuman
+        row_geo = ctk.CTkFrame(form, fg_color="transparent")
+        row_geo.pack(fill="x", padx=15, pady=6)
+
+        ctk.CTkLabel(row_geo, text="Viloyat:", font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=(0, 5))
+        cb_vil = ctk.CTkComboBox(row_geo, values=[
+            "Toshkent shahri", "Toshkent viloyati", "Samarqand viloyati", "Buxoro viloyati", 
+            "Farg'ona viloyati", "Andijon viloyati", "Namangan viloyati", "Qashqadaryo viloyati", 
+            "Surxondaryo viloyati", "Jizzax viloyati", "Sirdaryo viloyati", "Navoiy viloyati", 
+            "Xorazm viloyati", "Qoraqalpog'iston Respublikasi"
+        ], width=180)
+        cb_vil.pack(side="left", padx=(0, 15))
+
+        ctk.CTkLabel(row_geo, text="Tuman/Shahar:", font=ctk.CTkFont(size=11, weight="bold")).pack(side="left", padx=(0, 5))
+        e_tum = ctk.CTkEntry(row_geo, placeholder_text="Tuman nomi", width=160)
+        e_tum.pack(side="left")
+
+        # 4. Yo'nalish
+        ctk.CTkLabel(form, text="Yo'nalish tarmog'i:", font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=15, pady=(6, 2))
+        cb_yon = ctk.CTkComboBox(form, values=[
+            "Kadastr agentligi hududiy boshqarmasi xodimlarining xatti-harakatlari",
+            "Davlat kadastrlari palatasi hududiy boshqarmasi xodimlarining xatti-harakatlari"
+        ], width=400)
+        cb_yon.pack(fill="x", padx=15)
+
+        # 5. Murojaat mazmuni
+        ctk.CTkLabel(form, text="Murojaatning qisqacha mazmuni (Telefonda aytilgan vajlar):", font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=15, pady=(6, 2))
+        tb_matn = ctk.CTkTextbox(form, height=120, wrap="word")
+        tb_matn.pack(fill="both", expand=True, padx=15, pady=(0, 10))
+
+        def save_phone_entry():
+            fish_val = e_fish.get().strip()
+            tel_val = e_tel.get().strip()
+            vil_val = cb_vil.get()
+            tum_val = e_tum.get().strip()
+            yon_val = cb_yon.get()
+            matn_val = tb_matn.get("1.0", "end-1c").strip()
+
+            if not fish_val or not tel_val or not matn_val:
+                messagebox.showwarning("To'ldirish shart", "Iltimos, F.I.Sh, telefon raqami va murojaat mazmunini to'liq kiriting!")
+                return
+
+            masul = "Davlat kadastrlari palatasi hududiy komplayens xodimi" if "palata" in yon_val.lower() else "Kadastr agentligi hududiy komplayens xodimi"
+
+            new_id = self.loader.db.insert_phone_murojaat(fish_val, tel_val, vil_val, tum_val, yon_val, matn_val, masul)
+            self.loader.refresh_data()
+            modal.destroy()
+            self.show_dashboard_view()
+            messagebox.showinfo("Qabul qilindi", f"Murojaat muvaffaqiyatli ro'yxatga olindi!\nTartib raqami: #{new_id}\nManba: Ishonch telefoni (+998-71-273-19-66)")
+
+        btn_save = ctk.CTkButton(modal, text="💾 Murojaatni ro'yxatga olish", height=34, fg_color="#1B5E20", hover_color="#2E7D32", font=ctk.CTkFont(size=12, weight="bold"), command=save_phone_entry)
+        btn_save.pack(fill="x", padx=20, pady=(0, 15))
+
+    # ================= 5-POG'ONA: HUDUDIY XODIMLAR REYESTRI =================
     def show_xodimlar_view(self):
         self.view_stack.append(self.show_dashboard_view)
         self.btn_back.configure(state="normal")
@@ -705,7 +787,7 @@ class DashboardApp(ctk.CTk):
         fp = filedialog.asksaveasfilename(defaultextension=".xlsx", initialfile="Murojaatlar_Hisoboti.xlsx")
         if fp:
             ReportGenerator.export_excel(self.loader.filtered_df, fp)
-            messagebox.showinfo("Tayyor", "Mas'ul komplayens xodimlari ko'rsatilgan professional Excel saqlandi!")
+            messagebox.showinfo("Tayyor", "Professional Excel reyestri saqlandi!")
 
     def _export_word(self):
         fp = filedialog.asksaveasfilename(defaultextension=".docx", initialfile="Rahbariyatga_Malumotnoma.docx")
