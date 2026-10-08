@@ -25,7 +25,7 @@ jobs:
 
       - name: EXE yaratish (PyInstaller)
         run: |
-          pyinstaller --noconsole --onefile --name "Korrupsiya_Monitoring" --hidden-import=gspread --hidden-import=oauth2client --hidden-import=oauth2client.service_account --hidden-import=google.auth --hidden-import=openpyxl --hidden-import=pandas --hidden-import=requests --hidden-import=urllib3 main.py
+          pyinstaller --noconsole --onefile --name "Korrupsiya_Monitoring" --hidden-import=gspread --hidden-import=oauth2client --hidden-import=oauth2client.service_account --hidden-import=google.auth --hidden-import=openpyxl --hidden-import=pandas --hidden-import=requests --hidden-import=urllib3 --hidden-import=docx --hidden-import=docxtpl main.py
 
       - name: EXE faylni saqlash (Artifact)
         uses: actions/upload-artifact@v4
