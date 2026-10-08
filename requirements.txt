@@ -7,3 +7,5 @@ pillow
 pyinstaller
 requests
 urllib3
+python-docx
+docxtpl
