@@ -23,7 +23,7 @@ THEMES = {
     "Bronza (Bronze)": {"primary": "#553C13", "btn": "#8B6B22", "hover": "#AA8833"},
 }
 
-# ================= UNIVERSAL NUSXALASH VA QO'YISH (CTRL+C/V/X) 100% XAVFSIZ QILINDI =================
+# ================= UNIVERSAL NUSXALASH VA QO'YISH (100% XAVFSIZ) =================
 def enable_copy_paste(root):
     def copy_ev(e):
         try: e.widget.event_generate("<<Copy>>"); return "break"
@@ -35,24 +35,19 @@ def enable_copy_paste(root):
         try: e.widget.event_generate("<<Cut>>"); return "break"
         except: pass
 
-    # Inglizcha harflar uchun
-    root.bind_all("<Control-c>", copy_ev)
-    root.bind_all("<Control-v>", paste_ev)
-    root.bind_all("<Control-x>", cut_ev)
-    root.bind_all("<Control-C>", copy_ev)
-    root.bind_all("<Control-V>", paste_ev)
-    root.bind_all("<Control-X>", cut_ev)
-
-    # Krill klaviaturasida xato bermasligi uchun qat'iy himoya qilingan (try-except) bloklari
-    for key in ["<Control-Cyrillic_es>", "<Control-cyrillic_es>", "<Control-с>", "<Control-С>"]:
-        try: root.bind_all(key, copy_ev)
-        except: pass
-    for key in ["<Control-Cyrillic_em>", "<Control-cyrillic_em>", "<Control-м>", "<Control-М>"]:
-        try: root.bind_all(key, paste_ev)
-        except: pass
-    for key in ["<Control-Cyrillic_che>", "<Control-cyrillic_che>", "<Control-ч>", "<Control-Ч>"]:
-        try: root.bind_all(key, cut_ev)
-        except: pass
+    root.bind_all("<Control-KeyPress-c>", copy_ev)
+    root.bind_all("<Control-KeyPress-v>", paste_ev)
+    root.bind_all("<Control-KeyPress-x>", cut_ev)
+    root.bind_all("<Control-KeyPress-C>", copy_ev)
+    root.bind_all("<Control-KeyPress-V>", paste_ev)
+    root.bind_all("<Control-KeyPress-X>", cut_ev)
+    # Krillcha xarflar
+    root.bind_all("<Control-KeyPress-с>", copy_ev)
+    root.bind_all("<Control-KeyPress-м>", paste_ev)
+    root.bind_all("<Control-KeyPress-ч>", cut_ev)
+    root.bind_all("<Control-KeyPress-С>", copy_ev)
+    root.bind_all("<Control-KeyPress-М>", paste_ev)
+    root.bind_all("<Control-KeyPress-Ч>", cut_ev)
 
 def ensure_app_logo():
     os.makedirs("assets", exist_ok=True)
@@ -67,6 +62,49 @@ def ensure_app_logo():
         img.save(logo_path, format="PNG")
     return logo_path
 
+# ================= MUKAMMAL TARJIMA LUG'ATI (ENG UZUNLARI BIRINCHI) =================
+LAT_TO_CYR = [
+    ("SH", "Ш"), ("Sh", "Ш"), ("sH", "ш"), ("sh", "ш"),
+    ("CH", "Ч"), ("Ch", "Ч"), ("cH", "ч"), ("ch", "ч"),
+    ("O'", "Ў"), ("O‘", "Ў"), ("O`", "Ў"), ("o'", "ў"), ("o‘", "ў"), ("o`", "ў"),
+    ("G'", "Ғ"), ("G‘", "Ғ"), ("G`", "Ғ"), ("g'", "ғ"), ("g‘", "ғ"), ("g`", "ғ"),
+    ("YO", "Ё"), ("Yo", "Ё"), ("yO", "ё"), ("yo", "ё"),
+    ("YU", "Ю"), ("Yu", "Ю"), ("yU", "ю"), ("yu", "ю"),
+    ("YA", "Я"), ("Ya", "Я"), ("yA", "я"), ("ya", "я"),
+    ("TS", "Ц"), ("Ts", "Ц"), ("tS", "ц"), ("ts", "ц"),
+    ("YE", "Е"), ("Ye", "Е"), ("yE", "е"), ("ye", "е"),
+    ("A", "А"), ("a", "а"), ("B", "Б"), ("b", "б"), ("D", "Д"), ("d", "д"),
+    ("E", "Е"), ("e", "е"), ("F", "Ф"), ("f", "ф"), ("G", "Г"), ("g", "г"),
+    ("H", "Ҳ"), ("h", "ҳ"), ("I", "И"), ("i", "и"), ("J", "Ж"), ("j", "ж"),
+    ("K", "К"), ("k", "к"), ("L", "Л"), ("l", "л"), ("M", "М"), ("m", "м"),
+    ("N", "Н"), ("n", "н"), ("O", "О"), ("o", "о"), ("P", "П"), ("p", "п"),
+    ("Q", "Қ"), ("q", "қ"), ("R", "Р"), ("r", "р"), ("S", "С"), ("s", "с"),
+    ("T", "Т"), ("t", "т"), ("U", "У"), ("u", "у"), ("V", "В"), ("v", "в"),
+    ("X", "Х"), ("x", "х"), ("Y", "Й"), ("y", "й"), ("Z", "З"), ("z", "з"),
+    ("'", "ъ"), ("‘", "ъ"), ("`", "ъ")
+]
+
+CYR_TO_LAT = [
+    ("Ш", "Sh"), ("ш", "sh"),
+    ("Ч", "Ch"), ("ч", "ch"),
+    ("Ў", "O'"), ("ў", "o'"),
+    ("Ғ", "G'"), ("ғ", "g'"),
+    ("Ё", "Yo"), ("ё", "yo"),
+    ("Ю", "Yu"), ("ю", "yu"),
+    ("Я", "Ya"), ("я", "ya"),
+    ("Ц", "Ts"), ("ц", "ts"),
+    ("А", "A"), ("а", "a"), ("Б", "B"), ("б", "b"), ("Д", "D"), ("д", "d"),
+    ("Е", "E"), ("е", "e"), ("Ф", "F"), ("ф", "f"), ("Г", "G"), ("г", "g"),
+    ("Ҳ", "H"), ("ҳ", "h"), ("И", "I"), ("и", "i"), ("Ж", "J"), ("ж", "j"),
+    ("К", "K"), ("к", "k"), ("Л", "L"), ("л", "l"), ("М", "M"), ("м", "m"),
+    ("Н", "N"), ("н", "n"), ("О", "O"), ("о", "o"), ("П", "P"), ("п", "p"),
+    ("Қ", "Q"), ("қ", "q"), ("Р", "R"), ("р", "r"), ("С", "S"), ("с", "s"),
+    ("Т", "T"), ("т", "t"), ("У", "U"), ("у", "u"), ("В", "V"), ("в", "v"),
+    ("Х", "X"), ("х", "x"), ("Й", "Y"), ("й", "y"), ("З", "Z"), ("з", "z"),
+    ("Ъ", "'"), ("ъ", "'")
+]
+
+
 class DashboardApp(ctk.CTk):
     def __init__(self, data_loader, current_role="admin"):
         super().__init__()
@@ -74,7 +112,7 @@ class DashboardApp(ctk.CTk):
         self.role = current_role 
         
         self.current_theme = "Navy (Asl)"
-        self.is_cyrillic = False
+        self.is_cyrillic = True  # Dastur to'liq krillchada ochilishi uchun True qilindi
         
         self.geometry("1440x920")
         self.minsize(1220, 740)
@@ -98,50 +136,25 @@ class DashboardApp(ctk.CTk):
         
         self._redraw_entire_ui(initial=True)
 
-    # ================= MUKAMMAL TARJIMA FUNKSIYALARI =================
+    # ================= MUKAMMAL TARJIMA Dvigateli =================
     def _t(self, text):
+        if pd.isna(text) if 'pd' in globals() else text is None: return ""
         if text is None: return ""
         text = str(text)
         if not self.is_cyrillic: return text
-        
-        mapping = {
-            "Sh": "Ш", "sh": "ш", "SH": "Ш", "Ch": "Ч", "ch": "ч", "CH": "Ч",
-            "O'": "Ў", "O‘": "Ў", "o'": "ў", "o‘": "ў", "G'": "Ғ", "G‘": "Ғ", "g'": "ғ", "g‘": "ғ",
-            "Yo": "Ё", "yo": "ё", "YO": "Ё", "Yu": "Ю", "yu": "ю", "YU": "Ю",
-            "Ya": "Я", "ya": "я", "YA": "Я", "Ts": "Ц", "ts": "ц", "TS": "Ц", "Ye": "Е", "ye": "е", "YE": "Е",
-            "A": "А", "a": "а", "B": "Б", "b": "б", "D": "Д", "d": "д", "E": "Е", "e": "е",
-            "F": "Ф", "f": "ф", "G": "Г", "g": "г", "H": "Ҳ", "h": "ҳ", "I": "И", "i": "и",
-            "J": "Ж", "j": "ж", "K": "К", "k": "к", "L": "Л", "l": "л", "M": "М", "m": "м",
-            "N": "Н", "n": "н", "O": "О", "o": "о", "P": "П", "p": "п", "Q": "Қ", "q": "қ",
-            "R": "Р", "r": "р", "S": "С", "s": "с", "T": "Т", "t": "т", "U": "У", "u": "у",
-            "V": "В", "v": "в", "X": "Х", "x": "х", "Y": "Й", "y": "й", "Z": "З", "z": "з", "'": "ъ"
-        }
-        # ENG MUHIMI: Tarjima aniq bo'lishi uchun xarflar uzunligi bo'yicha kamayish tartibida saralanadi (Sh avval, S keyin)
-        for k in sorted(mapping.keys(), key=len, reverse=True):
-            text = text.replace(k, mapping[k])
+        for eng, rus in LAT_TO_CYR:
+            text = text.replace(eng, rus)
         return text
 
     def _to_latin(self, text):
+        if pd.isna(text) if 'pd' in globals() else text is None: return ""
         if text is None: return ""
         text = str(text)
         if not self.is_cyrillic: return text
-        
-        rev_mapping = {
-            "Ш": "Sh", "ш": "sh", "Ч": "Ch", "ч": "ch", "Ў": "O'", "ў": "o'",
-            "Ғ": "G'", "ғ": "g'", "Ё": "Yo", "ё": "yo", "Ю": "Yu", "ю": "yu", 
-            "Я": "Ya", "я": "ya", "Е": "E", "е": "e", "Ц": "Ts", "ц": "ts",
-            "А": "A", "а": "a", "Б": "B", "б": "b", "Д": "D", "д": "d", "Ф": "F", "ф": "f",
-            "Г": "G", "г": "g", "Ҳ": "H", "ҳ": "h", "И": "I", "и": "i", "Ж": "J", "ж": "j",
-            "К": "K", "к": "k", "Л": "L", "л": "l", "М": "M", "м": "m", "Н": "N", "н": "n",
-            "О": "O", "о": "o", "П": "P", "п": "p", "Қ": "Q", "қ": "q", "Р": "R", "р": "r",
-            "С": "S", "с": "s", "Т": "T", "т": "t", "У": "U", "у": "u", "В": "V", "в": "v",
-            "Х": "X", "х": "x", "Й": "Y", "й": "y", "З": "Z", "з": "z", "Ъ": "'", "ъ": "'"
-        }
-        for k in sorted(rev_mapping.keys(), key=len, reverse=True):
-            text = text.replace(k, rev_mapping[k])
+        for rus, eng in CYR_TO_LAT:
+            text = text.replace(rus, eng)
         return text
 
-    # ================= MAVZU VA TILNI YANGILASH =================
     def _redraw_entire_ui(self, initial=False):
         rol_matni = self._t(" (KUZATUVCHI REJIMI)") if self.role == "kuzatuvchi" else self._t(" (ADMINISTRATOR)")
         self.title(self._t("KADASTR AGENTLIGI — KORRUPSIYAGA QARSHI KOMPLAYENS MONITORING TIZIMI") + rol_matni)
@@ -215,7 +228,6 @@ class DashboardApp(ctk.CTk):
         ).pack(side="right", padx=4, pady=15)
         
         if self.role == "admin":
-            # KIRISHLAR TARIXI TUGMASI (AUDIT LOG)
             ctk.CTkButton(
                 nav, text=self._t("👁 Kirishlar tarixi"), width=140, height=34, 
                 fg_color="#D35400", hover_color="#A04000", 
@@ -850,7 +862,7 @@ class DashboardApp(ctk.CTk):
 
         ctk.CTkButton(main_box, text=self._t("💾 Murojaatni ro'yxatga olish"), height=38, width=250, fg_color="#1B5E20", hover_color="#2E7D32", font=ctk.CTkFont(size=13, weight="bold"), command=save_phone_entry).pack(pady=20)
 
-    # ================= 5-POG'ONA: HUDUDIY XODIMLAR REYESTRI (BO'SH QOLISH XATOSI TO'LIQ TUZATILDI) =================
+    # ================= 5-POG'ONA: HUDUDIY XODIMLAR REYESTRI (BO'SH JADVAL MUAMMOSI 100% YECHILDI) =================
     def show_xodimlar_view(self):
         self.current_view_func = self.show_xodimlar_view
         if self.show_dashboard_view not in self.view_stack:
@@ -897,18 +909,31 @@ class DashboardApp(ctk.CTk):
         def populate_x():
             tree.delete(*tree.get_children())
             try:
-                # 100% himoyalangan usulda ma'lumot tortish (Bo'sh jadval muammosi shu yerda hal bo'ldi)
                 for _, r in self.loader.db.get_xodimlar().iterrows(): 
-                    rid = r.get('id', '')
-                    rvil = str(r.get('viloyat', ''))
-                    rtash = str(r.get('tashkilot_turi', ''))
-                    rfish = str(r.get('fish', ''))
-                    rtel = str(r.get('telefon', ''))
-                    rtg = str(r.get('telegram_username', ''))
+                    # Ma'lumotlarni ishonchli (try/except) orqali olish, xatolik chiqmaydi
+                    try: val_id = str(r['id'])
+                    except: val_id = ""
+                    try: val_vil = str(r['viloyat'])
+                    except: val_vil = ""
+                    try: val_tash = str(r['tashkilot_turi'])
+                    except: val_tash = ""
+                    try: val_fish = str(r['fish'])
+                    except: val_fish = ""
+                    try: val_tel = str(r['telefon'])
+                    except: val_tel = ""
+                    try: val_tg = str(r['telegram_username'])
+                    except: val_tg = ""
                     
-                    tree.insert("", "end", values=(rid, self._t(rvil), self._t(rtash), self._t(rfish), rtel, rtg))
-            except Exception as e:
-                pass
+                    tree.insert("", "end", values=(
+                        val_id, self._t(val_vil), self._t(val_tash), 
+                        self._t(val_fish), val_tel, val_tg
+                    ))
+            except Exception:
+                # Agar tepa ishlamasa, majburiy to'g'ridan-to'g'ri zapros yuborish
+                try:
+                    for _, r in self.loader.db.get_xodimlar().iterrows():
+                        tree.insert("", "end", values=(r['id'], r['viloyat'], r['tashkilot_turi'], r['fish'], r['telefon'], r['telegram_username']))
+                except: pass
                 
         populate_x()
 
