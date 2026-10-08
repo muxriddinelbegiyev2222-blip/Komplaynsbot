@@ -1,0 +1,20 @@
+import os
+from PIL import Image, ImageDraw
+
+os.makedirs("assets", exist_ok=True)
+
+size = (256, 256)
+image = Image.new("RGBA", size, (0, 0, 0, 0))
+draw = ImageDraw.Draw(image)
+
+# Qalqon foni (Ko'k rang)
+draw.rounded_rectangle([16, 16, 240, 240], radius=50, fill="#1f538d", outline="#0d2b4d", width=8)
+# Ichki ramka
+draw.rounded_rectangle([40, 40, 216, 216], radius=35, fill="#14375e")
+# Qalqon shakli
+draw.polygon([(128, 55), (195, 85), (195, 150), (128, 205), (61, 150), (61, 85)], fill="#ffffff")
+draw.polygon([(128, 70), (180, 95), (180, 145), (128, 190), (76, 145), (76, 95)], fill="#2e7d32")
+
+image.save("assets/icon.ico", format="ICO", sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
+image.save("icon.ico", format="ICO", sizes=[(256, 256), (128, 128), (64, 64), (32, 32), (16, 16)])
+print("Ikonka muvaffaqiyatli saqlandi: assets/icon.ico")
