@@ -9,7 +9,7 @@ from datetime import datetime
 import urllib3
 import requests
 
-# 1. SSL TEKSHIRUVINI CHETLAB O'TISH (RAHBAR KOMPYUTERI VA GOOGLE SHEETS UCHUN)
+# RAHBAR KOMPYUTERIDAN KIRA OLISHI VA GOOGLE'GA ULANISH UCHUN SSL TO'SIQNI OLISH
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 _orig_session_init = requests.Session.__init__
 def _no_ssl_session_init(self, *args, **kwargs):
@@ -280,21 +280,55 @@ class DatabaseManager:
             threading.Thread(target=lambda: self._sync_single_row_to_cloud(row_data), daemon=True).start()
         return new_id
 
+    # EXCEL YUKLASH MUAMMOSI HAL ETILDI (Har xil ustun nomlarini taniydi)
     def sync_excel_data(self, df):
         new_cloud_records = []
         with self._get_connection() as conn:
             cursor = conn.cursor()
             for _, row in df.iterrows():
-                try: m_id = int(row.get('#', 0))
-                except: continue
-                if m_id <= 9: continue
+                m_id = None
+                
+                # Excel ustunida ID qanday nomlangan bo'lsa shuni qidiradi
+                for col_name in ['#', '№', 'ID', 'id', 'Tartib raqam']:
+                    if col_name in row and pd.notna(row[col_name]):
+                        try:
+                            m_id = int(str(row[col_name]).strip())
+                            break
+                        except:
+                            pass
+                
+                if not m_id or m_id <= 9: 
+                    continue
+                
                 cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
                 if not cursor.fetchone():
-                    default_masul = "Davlat kadastrlari palatasi hududiy komplayens xodimi" if 'palata' in str(row.get('Yoʻnalish', '')).lower() else "Kadastr agentligi hududiy komplayens xodimi"
-                    cursor.execute("""INSERT INTO murojaatlar (id, yaratilgan_sana, fish, telefon, viloyat, tuman, yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan, javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi, manba) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'O‘rganishga yuborilgan', '', '', ?, 'Chora ko‘rilmagan', 'Telegram bot')""", (m_id, str(row.get('Yaratilgan sana', '')), str(row.get('F.I.Sh.', '')), str(row.get('Telefon', '')), str(row.get('Viloyat', '')), str(row.get('Tuman', '')), str(row.get('Yoʻnalish', '')), str(row.get('Aniq_Yonalish', '')), str(row.get('Holat', '')), str(row.get('Murojaat matni', '')), str(row.get('Javob', '')), str(row.get('Javob bergan', '')), str(row.get('Javob sanasi', '')), default_masul))
+                    yonalish = str(row.get('Yoʻnalish', row.get('Yonalish', '')))
+                    default_masul = "Davlat kadastrlari palatasi hududiy komplayens xodimi" if 'palata' in yonalish.lower() else "Kadastr agentligi hududiy komplayens xodimi"
+                    
+                    sana = str(row.get('Yaratilgan sana', row.get('Yaratilgan_sana', row.get('Sana', ''))))
+                    fish = str(row.get('F.I.Sh.', row.get('FISH', row.get('F.I.SH', ''))))
+                    telefon = str(row.get('Telefon', row.get('Tel', '')))
+                    viloyat = str(row.get('Viloyat', ''))
+                    tuman = str(row.get('Tuman', ''))
+                    aniq_yonalish = str(row.get('Aniq_Yonalish', row.get('Aniq yonalish', '')))
+                    holat = str(row.get('Holat', ''))
+                    matn = str(row.get('Murojaat matni', row.get('Murojaat_matni', row.get('Matn', ''))))
+                    
+                    cursor.execute("""
+                        INSERT INTO murojaatlar (
+                            id, yaratilgan_sana, fish, telefon, viloyat, tuman, 
+                            yonalish, aniq_yonalish, holat, murojaat_matni, 
+                            javob, javob_bergan, javob_sanasi, ijro_holati, 
+                            organish_natijasi, biriktirilgan_fayl, masul_komplayens, 
+                            chora_turi, manba
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', 'O‘rganishga yuborilgan', '', '', ?, 'Chora ko‘rilmagan', 'Telegram bot')
+                    """, (m_id, sana, fish, telefon, viloyat, tuman, yonalish, aniq_yonalish, holat, matn, default_masul))
+                    
                     row_data = self._get_row_by_id(m_id)
-                    if row_data: new_cloud_records.append(row_data)
+                    if row_data:
+                        new_cloud_records.append(row_data)
             conn.commit()
+            
         if new_cloud_records and self.sheet:
             threading.Thread(target=lambda: self.sheet.append_rows([[str(x) if x is not None else "" for x in r] for r in new_cloud_records]), daemon=True).start()
 
