@@ -158,14 +158,10 @@ class DashboardApp(ctk.CTk):
         ctk.set_appearance_mode("Light")
         self.configure(fg_color="#ECEFF4")
 
-        # ================= VIEW STACK =================
-        # view_stack: tarix (oxirgisi — hozirgi view)
-        # _suppress_stack_push: orqaga qaytishda stack'ka qo'shishni bloklaydi
         self.view_stack = []
         self._suppress_stack_push = False
         self.current_view_func = None
 
-        # Tanlangan fayl yo'li (har kartochkada yangilanadi)
         self.attached_file_path = ""
 
         try:
@@ -183,9 +179,8 @@ class DashboardApp(ctk.CTk):
 
         self._redraw_entire_ui(initial=True)
 
-    # ================= TARJIMA DVIGATELLARI =================
+    # ================= TARJIMA =================
     def _t(self, text):
-        """Lotin -> Krill (agar krill rejimi yoqilgan bo'lsa)."""
         if _is_null(text):
             return ""
         text = str(text)
@@ -196,7 +191,6 @@ class DashboardApp(ctk.CTk):
         return text
 
     def _to_latin(self, text):
-        """Krill -> Lotin."""
         if _is_null(text):
             return ""
         text = str(text)
@@ -323,15 +317,6 @@ class DashboardApp(ctk.CTk):
             self.loader.refresh_data()
             self._redraw_entire_ui()
             messagebox.showinfo(self._t("Yangilandi"), self._t("Murojaatlar bulutdan olindi!"))
-        except AttributeError:
-            # Orqaga mos kelish uchun eski nom
-            try:
-                self.loader.db._sync_pull_from_cloud()
-                self.loader.refresh_data()
-                self._redraw_entire_ui()
-                messagebox.showinfo(self._t("Yangilandi"), self._t("Murojaatlar bulutdan olindi!"))
-            except Exception as e:
-                messagebox.showerror(self._t("Xatolik"), self._t(f"Bulutdan olishda xato: {e}"))
         except Exception as e:
             messagebox.showerror(self._t("Xatolik"), self._t(f"Bulutdan olishda xato: {e}"))
 
@@ -339,7 +324,7 @@ class DashboardApp(ctk.CTk):
         for widget in self.container.winfo_children():
             widget.destroy()
 
-    # ================= NAVIGATSIYA (TUZATILGAN) =================
+    # ================= NAVIGATSIYA =================
     def _go_back(self):
         if self.view_stack:
             prev_view = self.view_stack.pop()
@@ -352,7 +337,6 @@ class DashboardApp(ctk.CTk):
             self._redraw_entire_ui(initial=True)
 
     def _push_current_to_stack(self):
-        """Joriy view'ni stack'ka qo'shish (agar suppress qilinmagan bo'lsa)."""
         if self._suppress_stack_push:
             return
         if self.current_view_func is not None:
@@ -562,7 +546,6 @@ class DashboardApp(ctk.CTk):
             sla_d = 2
 
         def _days_passed_safe():
-            """DT ustuni xavfsiz hisoblash."""
             if 'DT' not in f_df.columns or f_df[is_org_mask].empty:
                 return None
             try:
@@ -811,7 +794,6 @@ class DashboardApp(ctk.CTk):
         self.lbl_path.configure(text=self._t(f"Asosiy oyna  /  Murojaatlar  /  Kartochka #{m_id}"))
         self._clear_container()
 
-        # Reset attached file holati
         self.attached_file_path = ""
 
         try:
@@ -828,7 +810,6 @@ class DashboardApp(ctk.CTk):
                                              border_width=1, border_color="#CBD5E1")
         main_scroll.pack(fill="both", expand=True, padx=4, pady=4)
 
-        # --- Yuqori info blok ---
         info_top = ctk.CTkFrame(main_scroll, fg_color="#F1F5F9", corner_radius=6,
                                 border_width=1, border_color="#CBD5E1")
         info_top.pack(fill="x", padx=15, pady=(10, 6))
@@ -851,7 +832,6 @@ class DashboardApp(ctk.CTk):
                          font=ctk.CTkFont(size=12, weight="bold"),
                          text_color="#C0392B").pack(padx=15, anchor="w")
 
-        # --- Murojaat matni ---
         ctk.CTkLabel(main_scroll, text=self._t("📝 Murojaat matni (to‘liq shaklda):"),
                      font=ctk.CTkFont(size=13, weight="bold"),
                      text_color="#0F2537").pack(padx=15, anchor="w")
@@ -861,7 +841,6 @@ class DashboardApp(ctk.CTk):
         tb_m.configure(state="disabled")
         tb_m.pack(fill="x", padx=15, pady=(4, 8))
 
-        # --- Amallar bloki ---
         action_frame = ctk.CTkFrame(main_scroll, fg_color="#F8FAFC", corner_radius=6,
                                     border_width=1, border_color="#CBD5E1")
         action_frame.pack(fill="x", padx=15, pady=(4, 10))
@@ -924,7 +903,6 @@ class DashboardApp(ctk.CTk):
                       font=ctk.CTkFont(size=11, weight="bold"),
                       command=send_to_telegram).pack(side="left", padx=10)
 
-        # --- Holat va chora ---
         row_status = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_status.pack(fill="x", padx=15, pady=3)
         ctk.CTkLabel(row_status, text=self._t("Murojaat holati:"),
@@ -956,7 +934,6 @@ class DashboardApp(ctk.CTk):
         cb_chora.set(self._t(str(rec.get('Chora_Turi', 'Chora ko‘rilmagan'))))
         cb_chora.pack(side="left")
 
-        # --- Natija matni ---
         ctk.CTkLabel(action_frame,
                      text=self._t("Hududiy komplayens xodimining o‘rganish xulosasi:"),
                      font=ctk.CTkFont(size=12, weight="bold")).pack(padx=15, pady=(5, 1), anchor="w")
@@ -966,7 +943,6 @@ class DashboardApp(ctk.CTk):
         tb_natija.insert("1.0", self._t(natija_text) if self.is_cyrillic else natija_text)
         tb_natija.pack(fill="x", padx=15, pady=(0, 6))
 
-        # --- Fayl biriktirish ---
         self.attached_file_path = str(rec.get('Biriktirilgan_Fayl', '') or '')
         file_box = ctk.CTkFrame(action_frame, fg_color="#FFFFFF", corner_radius=5,
                                 border_width=1, border_color="#CBD5E1")
@@ -991,7 +967,6 @@ class DashboardApp(ctk.CTk):
                       font=ctk.CTkFont(size=11, weight="bold"),
                       command=self._open_attached_file).pack(side="right", padx=4, pady=4)
 
-        # --- Saqlash va Word tugmalari ---
         row_save = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_save.pack(pady=(0, 10))
 
@@ -1061,14 +1036,11 @@ class DashboardApp(ctk.CTk):
                       width=250, height=32, font=ctk.CTkFont(size=12, weight="bold"),
                       command=download_resolution).pack(side="left", padx=10)
 
-        # --- Kuzatuvchi uchun disable ---
         if self.role == "kuzatuvchi":
             cb_masul_item.configure(state="disabled")
             cb_status.configure(state="disabled")
             cb_chora.configure(state="disabled")
             tb_natija.configure(state="disabled")
-            btn_tg = None  # btn_tg was created inline, ignore
-            # btn_attach, btn_save ni disable qilish
             try:
                 btn_attach.configure(state="disabled", fg_color="#95A5A6")
                 btn_save.configure(state="disabled", fg_color="#95A5A6")
@@ -1086,7 +1058,6 @@ class DashboardApp(ctk.CTk):
             attach_dir = os.path.join("data", "attachments")
             os.makedirs(attach_dir, exist_ok=True)
             dest = os.path.join(attach_dir, os.path.basename(fp))
-            # Xavfsiz nusxalash (fayl allaqachon bor bo'lsa ustidan yozish)
             if os.path.abspath(fp) != os.path.abspath(dest):
                 shutil.copy2(fp, dest)
             self.attached_file_path = dest
@@ -1101,7 +1072,7 @@ class DashboardApp(ctk.CTk):
         if self.attached_file_path and os.path.exists(self.attached_file_path):
             try:
                 if sys.platform == "win32":
-                    os.startfile(self.attached_file_path)  # type: ignore[attr-defined]
+                    os.startfile(self.attached_file_path)
                 elif sys.platform == "darwin":
                     subprocess.Popen(["open", self.attached_file_path])
                 else:
@@ -1302,7 +1273,6 @@ class DashboardApp(ctk.CTk):
 
         populate_x()
 
-        # --- Tahrirlash paneli ---
         edit_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
                                   border_width=1, border_color="#CBD5E1")
         edit_frame.pack(fill="x", padx=15, pady=(0, 12))
@@ -1384,7 +1354,6 @@ class DashboardApp(ctk.CTk):
                             border_width=1, border_color="#CBD5E1")
         form.pack(fill="x", padx=100, pady=10)
 
-        # SLA kun
         row_sla = ctk.CTkFrame(form, fg_color="transparent")
         row_sla.pack(fill="x", padx=20, pady=(20, 10))
         ctk.CTkLabel(row_sla, text=self._t("Ijro muddati (SLA kun):"),
@@ -1395,7 +1364,6 @@ class DashboardApp(ctk.CTk):
         ctk.CTkLabel(row_sla, text=self._t("kun (Asosiy ijro xavf chegarasi)"),
                      font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
 
-        # Word shapka
         ctk.CTkLabel(form, text=self._t("Word Xulosa Ma'lumotnomasi Sarlavhasi (Shapka):"),
                      font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(15, 2))
         tb_header = ctk.CTkTextbox(form, height=60, font=ctk.CTkFont(size=12))
@@ -1405,7 +1373,6 @@ class DashboardApp(ctk.CTk):
         tb_header.insert("1.0", self._t(h_text) if self.is_cyrillic else h_text)
         tb_header.pack(fill="x", padx=20)
 
-        # Telegram shablon
         ctk.CTkLabel(form, text=self._t("Telegramga xabar yuborish shabloni:"),
                      font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(15, 2))
         tb_tg = ctk.CTkTextbox(form, height=180, font=ctk.CTkFont(size=12))
@@ -1416,7 +1383,6 @@ class DashboardApp(ctk.CTk):
         def save_settings():
             try:
                 sla_val = e_sla.get().strip()
-                # SLA ni int sifatida tekshirish
                 int(sla_val)
             except ValueError:
                 messagebox.showerror(self._t("Xatolik"),
@@ -1473,7 +1439,6 @@ class DashboardApp(ctk.CTk):
         tree_u.column("role", width=150, anchor="center")
         tree_u.pack(fill="x", padx=15, pady=(15, 10))
 
-        # Original parollarni xotirada saqlaymiz (faqat kerak bo'lganda)
         user_passwords = {}
 
         def populate_users():
@@ -1488,7 +1453,6 @@ class DashboardApp(ctk.CTk):
             for _, r in df_u.iterrows():
                 uid = r['id']
                 user_passwords[uid] = r['password']
-                # Parolni yashirib ko'rsatamiz
                 tree_u.insert("", "end", values=(
                     uid, r['username'], "•" * 8, self._t(r['role'].upper())))
 
@@ -1520,7 +1484,6 @@ class DashboardApp(ctk.CTk):
             sel_uid[0] = v[0]
             e_u.delete(0, 'end')
             e_u.insert(0, v[1])
-            # Parolni to'ldirmaymiz — xavfsizlik uchun
             e_p.delete(0, 'end')
             role_val = self._to_latin(v[3]).lower()
             cb_r.set(role_val if role_val in ["admin", "kuzatuvchi"] else "kuzatuvchi")
@@ -1554,7 +1517,6 @@ class DashboardApp(ctk.CTk):
                 return
             new_pass = e_p.get().strip()
             if not new_pass:
-                # Parol o'zgartirilmasa - eskisini saqlab qolamiz
                 new_pass = user_passwords.get(sel_uid[0], "")
             try:
                 self.loader.db.update_user(sel_uid[0], e_u.get().strip(), new_pass, cb_r.get())
