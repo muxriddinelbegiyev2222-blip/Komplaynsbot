@@ -23,12 +23,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Belgini (icon) yaratish
+        run: |
+          python create_icon.py
+
       - name: EXE yaratish (PyInstaller)
         run: |
-          pyinstaller --noconsole --onefile --hidden-import=gspread --hidden-import=oauth2client --hidden-import=oauth2client.service_account --hidden-import=google.auth --hidden-import=openpyxl --hidden-import=pandas main.py
+          pyinstaller --noconsole --onefile --name "Korrupsiya_Monitoring" --icon="assets/icon.ico" --hidden-import=gspread --hidden-import=oauth2client --hidden-import=oauth2client.service_account --hidden-import=google.auth --hidden-import=openpyxl --hidden-import=pandas --hidden-import=requests --hidden-import=urllib3 main.py
 
       - name: EXE faylni saqlash (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: Komplaynsbot-EXE
-          path: dist/main.exe
+          name: Korrupsiya_Monitoring-EXE
+          path: dist/Korrupsiya_Monitoring.exe
