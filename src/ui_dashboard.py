@@ -28,9 +28,7 @@ THEMES = {
 }
 
 
-# ================= YORDAMCHI FUNKSIYALAR =================
 def _is_null(value):
-    """NaN / None / pd.NA ni xavfsiz aniqlash."""
     if value is None:
         return True
     try:
@@ -41,7 +39,6 @@ def _is_null(value):
 
 
 def enable_copy_paste(root):
-    """Universal nusxalash/joylash (Lotin va Krill klaviatura uchun)."""
     def _generate(event_name):
         def handler(e):
             try:
@@ -61,7 +58,6 @@ def enable_copy_paste(root):
 
 
 def ensure_app_logo():
-    """Logotipni yaratish / tekshirish."""
     os.makedirs("assets", exist_ok=True)
     logo_path = os.path.join("assets", "compliance_logo.png")
     if not os.path.exists(logo_path):
@@ -78,7 +74,6 @@ def ensure_app_logo():
 
 
 def reveal_in_file_manager(filepath):
-    """Faylni Explorer/Finder/Nautilus da ko'rsatish (cross-platform)."""
     filepath = os.path.abspath(filepath)
     try:
         if sys.platform == "win32":
@@ -91,17 +86,14 @@ def reveal_in_file_manager(filepath):
         messagebox.showwarning("Diqqat", f"Fayl joyini ochib bo'lmadi: {e}")
 
 
-def sanitize_telegram_username(name: str) -> str:
-    """Faqat harf, raqam va pastki chiziqcha qoldirish."""
+def sanitize_telegram_username(name):
     return re.sub(r"[^a-zA-Z0-9_]", "", str(name or "").strip().lstrip("@"))
 
 
-def sanitize_phone(phone: str) -> str:
-    """Telefon raqamdan faqat raqamlarni qoldirish."""
+def sanitize_phone(phone):
     return re.sub(r"\D", "", str(phone or ""))
 
 
-# ================= TARJIMA LUG'ATLARI =================
 LAT_TO_CYR = [
     ("SH", "Ш"), ("Sh", "Ш"), ("sH", "ш"), ("sh", "ш"),
     ("CH", "Ч"), ("Ch", "Ч"), ("cH", "ч"), ("ch", "ч"),
@@ -144,8 +136,8 @@ CYR_TO_LAT = [
 ]
 
 
-class DashboardApp(ctk.CTk):
-        def __init__(self, data_loader, current_role="admin", master=None):
+class DashboardApp(ctk.CTkToplevel):
+    def __init__(self, data_loader, current_role="admin", master=None):
         super().__init__(master)
         self.loader = data_loader
         self.role = current_role
@@ -179,7 +171,6 @@ class DashboardApp(ctk.CTk):
 
         self._redraw_entire_ui(initial=True)
 
-    # ================= TARJIMA =================
     def _t(self, text):
         if _is_null(text):
             return ""
@@ -200,8 +191,7 @@ class DashboardApp(ctk.CTk):
             text = text.replace(rus, eng)
         return text
 
-    # ================= UI QAYTA QURISH =================
-        def _redraw_entire_ui(self, initial=False):
+    def _redraw_entire_ui(self, initial=False):
         self.deiconify()
         self.lift()
         self.focus_force()
@@ -235,7 +225,6 @@ class DashboardApp(ctk.CTk):
         self.is_cyrillic = not self.is_cyrillic
         self._redraw_entire_ui()
 
-    # ================= TOP NAVBAR =================
     def _build_top_navbar(self):
         nav = ctk.CTkFrame(self.main_wrapper, fg_color=self.t_colors["primary"], height=65, corner_radius=0)
         nav.pack(fill="x", side="top", pady=(0, 10))
@@ -328,7 +317,6 @@ class DashboardApp(ctk.CTk):
         for widget in self.container.winfo_children():
             widget.destroy()
 
-    # ================= NAVIGATSIYA =================
     def _go_back(self):
         if self.view_stack:
             prev_view = self.view_stack.pop()
@@ -346,7 +334,6 @@ class DashboardApp(ctk.CTk):
         if self.current_view_func is not None:
             self.view_stack.append(self.current_view_func)
 
-    # ================= 1-POG'ONA: DASHBOARD =================
     def show_dashboard_view(self):
         self.current_view_func = self.show_dashboard_view
         self.view_stack.clear()
@@ -354,7 +341,6 @@ class DashboardApp(ctk.CTk):
         self.lbl_path.configure(text=self._t("Asosiy oyna  /  Tahliliy Dashboard"))
         self._clear_container()
 
-        # ===== FILTR PANELI =====
         filter_box = ctk.CTkFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
                                   border_width=1, border_color="#CBD5E1")
         filter_box.pack(fill="x", pady=(0, 8), padx=2)
@@ -413,7 +399,6 @@ class DashboardApp(ctk.CTk):
             font=ctk.CTkFont(size=11), command=self._reset_filters
         ).pack(side="left", padx=6, pady=7)
 
-        # ===== KPI KARTALAR =====
         cards_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         cards_frame.pack(fill="x", pady=(0, 8))
         stats = self.loader.get_kpi_stats()
@@ -458,7 +443,6 @@ class DashboardApp(ctk.CTk):
                           fg_color="transparent", border_width=1, border_color="#CBD5E1",
                           font=ctk.CTkFont(size=9), command=cmd).pack(pady=(0, 6))
 
-        # ===== VILOYATLAR JADVALI =====
         table_container = ctk.CTkFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
                                        border_width=1, border_color="#CBD5E1")
         table_container.pack(fill="both", expand=True, padx=2, pady=(0, 8))
@@ -537,7 +521,6 @@ class DashboardApp(ctk.CTk):
 
         self.dash_tree.bind("<Double-1>", on_region_double_click)
 
-        # ===== PASTKI PANEL =====
         bottom_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         bottom_frame.pack(fill="x", pady=(0, 2))
 
@@ -666,7 +649,6 @@ class DashboardApp(ctk.CTk):
         self.loader.filter_data("Barchasi", "Barchasi", "Barchasi", "")
         self.show_dashboard_view()
 
-    # ================= 2-POG'ONA: RO'YXAT =================
     def show_records_view(self, title, data_df):
         self._push_current_to_stack()
         self.current_view_func = lambda t=title, d=data_df: self.show_records_view(t, d)
@@ -789,7 +771,6 @@ class DashboardApp(ctk.CTk):
 
         tree.bind("<Double-1>", on_double_click)
 
-    # ================= 3-POG'ONA: KARTOCHKA =================
     def show_detail_view(self, m_id, return_callback):
         self._push_current_to_stack()
         self.current_view_func = lambda: self.show_detail_view(m_id, return_callback)
@@ -1088,7 +1069,6 @@ class DashboardApp(ctk.CTk):
             messagebox.showwarning(self._t("Fayl yo'q"),
                                    self._t("Ushbu murojaatga hali hech qanday hujjat biriktirilmagan!"))
 
-    # ================= 4-POG'ONA: TELEFON QABUL =================
     def show_add_phone_view(self):
         self._push_current_to_stack()
         self.current_view_func = self.show_add_phone_view
@@ -1202,7 +1182,6 @@ class DashboardApp(ctk.CTk):
                       font=ctk.CTkFont(size=13, weight="bold"),
                       command=save_phone_entry).pack(pady=20)
 
-    # ================= 5-POG'ONA: HUDUDIY XODIMLAR =================
     def show_xodimlar_view(self):
         self._push_current_to_stack()
         self.current_view_func = self.show_xodimlar_view
@@ -1335,7 +1314,6 @@ class DashboardApp(ctk.CTk):
                       font=ctk.CTkFont(size=11, weight="bold"),
                       command=save_x).pack(side="left", padx=10)
 
-    # ================= 6-POG'ONA: ADMIN PANEL =================
     def show_settings_view(self):
         self._push_current_to_stack()
         self.current_view_func = self.show_settings_view
@@ -1414,7 +1392,6 @@ class DashboardApp(ctk.CTk):
                       font=ctk.CTkFont(size=12, weight="bold"),
                       command=save_settings).pack(pady=15)
 
-        # ================= FOYDALANUVCHILAR =================
         ctk.CTkLabel(main_box,
                      text=self._t("👥 FOYDALANUVCHILAR VA ROLLARI (LOGIN / PAROL)"),
                      font=ctk.CTkFont(size=14, weight="bold"),
@@ -1562,7 +1539,6 @@ class DashboardApp(ctk.CTk):
                       fg_color="#C0392B", hover_color="#A93226",
                       command=del_u).pack(side="left", padx=5)
 
-    # ================= 7-POG'ONA: AUDIT LOG =================
     def show_audit_view(self):
         win = ctk.CTkToplevel(self)
         win.title(self._t("Tizimga kirishlar tarixi (Audit Log)"))
@@ -1616,7 +1592,6 @@ class DashboardApp(ctk.CTk):
             messagebox.showerror(self._t("Xatolik"),
                                  self._t(f"Audit logni olishda xato: {e}"))
 
-    # ================= EKSPORT VA YUKLASH =================
     def _import_excel(self):
         fp = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
         if not fp:
