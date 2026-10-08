@@ -23,14 +23,12 @@ def ensure_app_logo():
     return logo_path
 
 class DashboardApp(ctk.CTk):
-    # Sadece bu satırda username ve role bağlantısı güncellendi
-    def __init__(self, data_loader, username="admin", role="admin"):
+    def __init__(self, data_loader, current_role="admin"):
         super().__init__()
         self.loader = data_loader
-        self.username = username
-        self.role = str(role).lower() 
+        self.role = current_role 
         
-        rol_matni = f" ({self.username.upper()} - KUZATUVCHI REJIMI)" if self.role == "kuzatuvchi" else f" ({self.username.upper()} - ADMINISTRATOR)"
+        rol_matni = " (KUZATUVCHI REJIMI)" if self.role == "kuzatuvchi" else " (ADMINISTRATOR)"
         self.title("KADASTR AGENTLIGI — KORRUPSIYAGA QARSHI KOMPLAYENS MONITORING TIZIMI" + rol_matni)
         
         self.geometry("1440x920")
@@ -578,13 +576,24 @@ class DashboardApp(ctk.CTk):
             self.loader.refresh_data()
             messagebox.showinfo("Saqlandi", f"#{m_id} sonli murojaat ijrosi saqlandi!")
 
+        # -------------------------------------------------------------
+        # WORD YUKLASH FUNKSIYASI TO'G'RILANDI (440-QATOR)
+        # -------------------------------------------------------------
         def download_resolution():
-            rec_updated = self.loader.df[self.loader.df['#'] == m_id].iloc[0]
+            rec_updated = self.loader.df[self.loader.df['#'] == m_id].iloc[0].copy()
+            
+            # QO'SHILGAN QISM: Ekrandagi kiritilgan ma'lumotlarni majburiy o'qib olish
+            rec_updated['Organish_Natijasi'] = tb_natija.get("1.0", "end-1c").strip()
+            rec_updated['Ijro_Holati'] = cb_status.get()
+            rec_updated['Chora_Turi'] = cb_chora.get()
+            rec_updated['Masul_Komplayens'] = cb_masul_item.get()
+            
             fp = filedialog.asksaveasfilename(defaultextension=".docx", initialfile=f"Xulosa_{m_id}.docx")
             if fp:
                 ReportGenerator.generate_resolution_report(rec_updated, fp, sets.get("report_header", "O‘ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI\nKORRUPSIYAGA QARSHI KURASHISH BO‘LIMI"))
                 messagebox.showinfo("Tayyor", "Rasmiy xulosa ma'lumotnomasi yuklab olindi!")
                 os.system(f'explorer /select,"{os.path.abspath(fp)}"')
+        # -------------------------------------------------------------
 
         btn_save = ctk.CTkButton(row_save, text="💾 Saqlash", fg_color="#1B5E20", hover_color="#2E7D32", width=130, height=32, font=ctk.CTkFont(size=12, weight="bold"), command=save_changes)
         btn_save.pack(side="left", padx=10)
