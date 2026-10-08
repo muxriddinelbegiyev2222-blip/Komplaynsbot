@@ -1,187 +1,117 @@
 import customtkinter as ctk
-from tkinter import ttk, filedialog, messagebox
-import pandas as pd
+from tkinter import messagebox
 
 class DetailsWindow(ctk.CTkToplevel):
-    def __init__(self, parent, title, filtered_df):
+    def __init__(self, parent, m_id, db, refresh_cb, role="admin"):
         super().__init__(parent)
-        self.title(title)
-        self.geometry("1180x680")
-        self.original_df = filtered_df.copy()
-        self.current_df = filtered_df.copy()
+        self.m_id = m_id
+        self.db = db
+        self.refresh_cb = refresh_cb
+        self.role = str(role).lower()  # Rolni qabul qilamiz
 
-        self.attributes('-topmost', True)
-        self.after(100, lambda: self.attributes('-topmost', False))
-
-        self._build_ui(title)
-
-    def _build_ui(self, title):
-        # Sarlavha va eksport paneli
-        header_frame = ctk.CTkFrame(self, fg_color="#1F497D", corner_radius=0, height=52)
-        header_frame.pack(fill="x", side="top")
+        self.title(f"Murojaat kartochkasi - № {self.m_id}")
+        self.geometry("700x750")
+        self.grab_set()
         
-        self.lbl_title = ctk.CTkLabel(
-            header_frame, 
-            text=f"{title} (Jami: {len(self.current_df)} ta)", 
-            font=ctk.CTkFont(size=16, weight="bold"),
-            text_color="white"
-        )
-        self.lbl_title.pack(pady=12, padx=20, side="left")
+        ctk.set_appearance_mode("Dark")
 
-        # Excelga eksport tugmasi
-        btn_export = ctk.CTkButton(
-            header_frame,
-            text="📥 Excelga yuklash",
-            fg_color="#27AE60",
-            hover_color="#1E8449",
-            width=130,
-            command=self._export_to_excel
-        )
-        btn_export.pack(pady=10, padx=20, side="right")
+        self.row_data = self.db._get_row_by_id(self.m_id)
+        if not self.row_data:
+            messagebox.showerror("Xato", "Murojaat topilmadi!")
+            self.destroy()
+            return
 
-        # Qidiruv va Filtrlash paneli
-        filter_bar = ctk.CTkFrame(self, fg_color="#EBF0F5", height=45)
-        filter_bar.pack(fill="x", padx=15, pady=(10, 0))
+        self._build_ui()
+        self._populate_data()
 
-        lbl_s = ctk.CTkLabel(filter_bar, text="🔍 Tezkor qidiruv:", font=ctk.CTkFont(size=12, weight="bold"))
-        lbl_s.pack(side="left", padx=(15, 5), pady=8)
+    def _build_ui(self):
+        # Asosiy ramka
+        main_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-        self.search_entry = ctk.CTkEntry(filter_bar, placeholder_text="F.I.Sh, telefon, tuman yoki kalit so'z...", width=320)
-        self.search_entry.pack(side="left", padx=5, pady=8)
-        self.search_entry.bind("<KeyRelease>", self._apply_search)
+        ctk.CTkLabel(main_frame, text=f"📄 Murojaat № {self.m_id} tafsilotlari", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(0, 20))
 
-        btn_reset = ctk.CTkButton(filter_bar, text="Tozalash", width=80, fg_color="#7F8C8D", command=self._reset_search)
-        btn_reset.pack(side="left", padx=10, pady=8)
-
-        # Jadval qismi
-        content_frame = ctk.CTkFrame(self)
-        content_frame.pack(fill="both", expand=True, padx=15, pady=10)
-
-        columns = ("id", "sana", "fish", "telefon", "viloyat", "tuman", "yonalish", "kategoriya", "ijro_vaqti")
+        # 1. O'zgartirib bo'lmaydigan ma'lumotlar (Fuqaro va matn)
+        info_frame = ctk.CTkFrame(main_frame, corner_radius=10)
+        info_frame.pack(fill="x", pady=10)
         
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("Treeview", rowheight=26, font=("Calibri", 10))
-        style.configure("Treeview.Heading", font=("Calibri", 10, "bold"), background="#E1E6EB")
+        self.lbl_info = ctk.CTkLabel(info_frame, text="", justify="left", font=ctk.CTkFont(size=13))
+        self.lbl_info.pack(padx=15, pady=15, anchor="w")
 
-        self.tree = ttk.Treeview(content_frame, columns=columns, show="headings", selectmode="browse")
-        
-        self.tree.heading("id", text="#")
-        self.tree.heading("sana", text="Sana")
-        self.tree.heading("fish", text="F.I.Sh.")
-        self.tree.heading("telefon", text="Telefon")
-        self.tree.heading("viloyat", text="Viloyat")
-        self.tree.heading("tuman", text="Tuman")
-        self.tree.heading("yonalish", text="Yoʻnalish")
-        self.tree.heading("kategoriya", text="Kategoriya")
-        self.tree.heading("ijro_vaqti", text="Ijro (soat)")
+        self.txt_matn = ctk.CTkTextbox(info_frame, height=120)
+        self.txt_matn.pack(padx=15, pady=(0, 15), fill="x")
+        self.txt_matn.configure(state="disabled") # Asl matn doim qulfli
 
-        self.tree.column("id", width=40, anchor="center")
-        self.tree.column("sana", width=120, anchor="center")
-        self.tree.column("fish", width=150, anchor="w")
-        self.tree.column("telefon", width=100, anchor="center")
-        self.tree.column("viloyat", width=110, anchor="w")
-        self.tree.column("tuman", width=110, anchor="w")
-        self.tree.column("yonalish", width=180, anchor="w")
-        self.tree.column("kategoriya", width=120, anchor="center")
-        self.tree.column("ijro_vaqti", width=80, anchor="center")
+        # 2. Tahrirlanadigan qism (Holat, Natija, Chora)
+        edit_frame = ctk.CTkFrame(main_frame, corner_radius=10, fg_color="#0f2744")
+        edit_frame.pack(fill="x", pady=10)
 
-        vsb = ttk.Scrollbar(content_frame, orient="vertical", command=self.tree.yview)
-        hsb = ttk.Scrollbar(content_frame, orient="horizontal", command=self.tree.xview)
-        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        ctk.CTkLabel(edit_frame, text="Ijro holati:").grid(row=0, column=0, padx=15, pady=10, sticky="w")
+        self.cb_ijro = ctk.CTkComboBox(edit_frame, values=["O‘rganishga yuborilgan", "O‘rganilmoqda", "Bajarildi (Ijobiy)", "Tushuntirish berildi", "Rad etildi", "Asossiz deb topildi"], width=350)
+        self.cb_ijro.grid(row=0, column=1, padx=15, pady=10)
 
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
+        ctk.CTkLabel(edit_frame, text="Mas'ul xodim:").grid(row=1, column=0, padx=15, pady=10, sticky="w")
+        self.e_masul = ctk.CTkEntry(edit_frame, width=350, placeholder_text="Mas'ul ismini kiriting...")
+        self.e_masul.grid(row=1, column=1, padx=15, pady=10)
 
-        content_frame.grid_rowconfigure(0, weight=1)
-        content_frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(edit_frame, text="Chora turi:").grid(row=2, column=0, padx=15, pady=10, sticky="w")
+        self.cb_chora = ctk.CTkComboBox(edit_frame, values=["Chora ko‘rilmagan", "Hayfsan", "Jarima", "Vazifasidan ozod etildi", "Jinoiy ish qo'zg'atildi"], width=350)
+        self.cb_chora.grid(row=2, column=1, padx=15, pady=10)
 
-        self.tree.bind("<Double-1>", self._on_item_double_click)
-        self._populate_tree(self.current_df)
+        ctk.CTkLabel(edit_frame, text="O'rganish natijasi:").grid(row=3, column=0, padx=15, pady=10, sticky="nw")
+        self.txt_natija = ctk.CTkTextbox(edit_frame, height=80, width=350)
+        self.txt_natija.grid(row=3, column=1, padx=15, pady=10)
 
-        lbl_hint = ctk.CTkLabel(self, text="💡 Murojaat matni va yuborilgan javobni to'liq ko'rish uchun qator ustiga sichqoncha bilan ikki marta bosing.", font=ctk.CTkFont(size=11, slant="italic"))
-        lbl_hint.pack(pady=4)
-
-    def _populate_tree(self, df):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+        # -------------------------------------------------------------
+        # RAHBAR UCHUN XAVFSIZLIK CHEKLOVI
+        # -------------------------------------------------------------
+        if self.role != "admin":
+            # Rahbar kirsa, hamma kiritish maydonlari qulflanadi
+            self.cb_ijro.configure(state="disabled")
+            self.e_masul.configure(state="disabled")
+            self.cb_chora.configure(state="disabled")
+            self.txt_natija.configure(state="disabled")
             
-        for _, row in df.iterrows():
-            self.tree.insert("", "end", values=(
-                row.get('#', ''),
-                str(row.get('Yaratilgan sana', ''))[:16],
-                row.get('F.I.Sh.', ''),
-                row.get('Telefon', ''),
-                row.get('Viloyat', ''),
-                row.get('Tuman', ''),
-                row.get('Yoʻnalish', ''),
-                row.get('Kategoriya', ''),
-                row.get('Ijro_Vaqti_Soat', 0.0)
-            ))
-        self.lbl_title.configure(text=f"Jami saralangan murojaatlar: {len(df)} ta")
-
-    def _apply_search(self, event=None):
-        query = self.search_entry.get().strip().lower()
-        if not query:
-            self.current_df = self.original_df.copy()
+            # Saqlash tugmasi o'rniga ogohlantirish yozuvi chiqadi
+            lbl_warning = ctk.CTkLabel(main_frame, text="👁 Sizda faqat ko'rish huquqi mavjud", text_color="#f59e0b", font=ctk.CTkFont(weight="bold"))
+            lbl_warning.pack(pady=20)
         else:
-            mask = (
-                self.original_df['F.I.Sh.'].astype(str).str.lower().str.contains(query) |
-                self.original_df['Telefon'].astype(str).str.lower().str.contains(query) |
-                self.original_df['Tuman'].astype(str).str.lower().str.contains(query) |
-                self.original_df['Viloyat'].astype(str).str.lower().str.contains(query) |
-                self.original_df['Murojaat matni'].astype(str).str.lower().str.contains(query)
-            )
-            self.current_df = self.original_df[mask]
-        self._populate_tree(self.current_df)
+            # Admin kirsa, saqlash tugmasi chiqadi
+            self.btn_save = ctk.CTkButton(main_frame, text="💾 O'zgarishlarni saqlash", height=40, fg_color="#15803d", hover_color="#166534", command=self._save_changes)
+            self.btn_save.pack(pady=20)
 
-    def _reset_search(self):
-        self.search_entry.delete(0, 'end')
-        self.current_df = self.original_df.copy()
-        self._populate_tree(self.current_df)
-
-    def _export_to_excel(self):
-        if self.current_df.empty:
-            messagebox.showwarning("Ogohlantirish", "Eksport qilish uchun ma'lumot mavjud emas!")
-            return
-            
-        path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel files", "*.xlsx")])
-        if path:
-            self.current_df.to_excel(path, index=False)
-            messagebox.showinfo("Muvaffaqiyatli", "Jadval saqlandi!")
-
-    def _on_item_double_click(self, event):
-        item = self.tree.selection()
-        if not item:
-            return
-        vals = self.tree.item(item, "values")
-        m_id = int(vals[0])
-
-        m_data = self.original_df[self.original_df['#'] == m_id].iloc[0]
-
-        box = ctk.CTkToplevel(self)
-        box.title(f"Murojaat tafsiloti: #{m_id}")
-        box.geometry("720x560")
-        box.attributes('-topmost', True)
-
-        txt_info = (
-            f"F.I.Sh: {m_data.get('F.I.Sh.', '')}\n"
-            f"Telefon: {m_data.get('Telefon', '')}\n"
-            f"Hudud: {m_data.get('Viloyat', '')}, {m_data.get('Tuman', '')}\n"
-            f"Yo'nalish: {m_data.get('Yoʻnalish', '')}\n"
-            f"Ijro vaqti: {m_data.get('Ijro_Vaqti_Soat', 0)} soat | Javob bergan: {m_data.get('Javob bergan', '')}\n"
+    def _populate_data(self):
+        r = self.row_data
+        
+        info_text = (
+            f"Sana: {str(r[1])[:10]}\n"
+            f"F.I.Sh: {r[2]}\n"
+            f"Telefon: {r[3]}\n"
+            f"Hudud: {r[4]}, {r[5]}\n"
+            f"Yo'nalish: {r[6]}\n"
+            f"Manba: {r[18]}"
         )
-        ctk.CTkLabel(box, text=txt_info, justify="left", font=ctk.CTkFont(size=12, weight="bold")).pack(padx=15, pady=10, anchor="w")
+        self.lbl_info.configure(text=info_text)
+        
+        self.txt_matn.configure(state="normal")
+        self.txt_matn.insert("0.0", str(r[9]))
+        self.txt_matn.configure(state="disabled")
 
-        ctk.CTkLabel(box, text="Murojaat matni:", font=ctk.CTkFont(weight="bold")).pack(padx=15, anchor="w")
-        tb_m = ctk.CTkTextbox(box, height=130, wrap="word")
-        tb_m.insert("1.0", str(m_data.get('Murojaat matni', '')))
-        tb_m.configure(state="disabled")
-        tb_m.pack(padx=15, pady=5, fill="x")
+        self.cb_ijro.set(str(r[13]) if r[13] else "O‘rganishga yuborilgan")
+        self.txt_natija.insert("0.0", str(r[14]) if r[14] else "")
+        self.e_masul.insert(0, str(r[16]) if r[16] else "")
+        self.cb_chora.set(str(r[17]) if r[17] else "Chora ko‘rilmagan")
 
-        ctk.CTkLabel(box, text="Yuborilgan javob xati:", font=ctk.CTkFont(weight="bold")).pack(padx=15, anchor="w")
-        tb_j = ctk.CTkTextbox(box, height=120, wrap="word")
-        tb_j.insert("1.0", str(m_data.get('Javob', '')))
-        tb_j.configure(state="disabled")
-        tb_j.pack(padx=15, pady=5, fill="x")
+    def _save_changes(self):
+        ijro = self.cb_ijro.get()
+        masul = self.e_masul.get().strip()
+        chora = self.cb_chora.get()
+        natija = self.txt_natija.get("0.0", "end").strip()
+
+        try:
+            self.db.update_murojaat_ijro(self.m_id, ijro, natija, '', masul, chora)
+            messagebox.showinfo("Muvaffaqiyatli", "Murojaat holati saqlandi va bulutga yuborildi!")
+            self.refresh_cb()
+            self.destroy()
+        except Exception as e:
+            messagebox.showerror("Xato", f"Saqlashda xato: {e}")
