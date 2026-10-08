@@ -23,18 +23,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Belgini (icon) yaratish
-        run: |
-          python create_icon.py
-
       - name: EXE yaratish (PyInstaller)
-        shell: pwsh
         run: |
-          if (Test-Path "assets\icon.ico") {
-            pyinstaller --noconsole --onefile --name "Korrupsiya_Monitoring" --icon="assets/icon.ico" --hidden-import=gspread --hidden-import=oauth2client --hidden-import=oauth2client.service_account --hidden-import=google.auth --hidden-import=openpyxl --hidden-import=pandas --hidden-import=requests --hidden-import=urllib3 --hidden-import=PIL main.py
-          } else {
-            pyinstaller --noconsole --onefile --name "Korrupsiya_Monitoring" --hidden-import=gspread --hidden-import=oauth2client --hidden-import=oauth2client.service_account --hidden-import=google.auth --hidden-import=openpyxl --hidden-import=pandas --hidden-import=requests --hidden-import=urllib3 --hidden-import=PIL main.py
-          }
+          pyinstaller --noconsole --onefile --name "Korrupsiya_Monitoring" --hidden-import=gspread --hidden-import=oauth2client --hidden-import=oauth2client.service_account --hidden-import=google.auth --hidden-import=openpyxl --hidden-import=pandas --hidden-import=requests --hidden-import=urllib3 --hidden-import=PIL main.py
 
       - name: EXE faylni saqlash (Artifact)
         uses: actions/upload-artifact@v4
