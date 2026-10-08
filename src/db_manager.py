@@ -1,11 +1,18 @@
+import sys
+import os
 import sqlite3
 import pandas as pd
-import os
 import shutil
 import threading
 from datetime import datetime
 
-# Google Sheets ulanishi uchun
+# .exe fayl turgan asosiy papkani aniqlash
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Google Sheets ulanishi
 try:
     import gspread
     from oauth2client.service_account import ServiceAccountCredentials
@@ -15,17 +22,16 @@ except ImportError:
 
 class DatabaseManager:
     def __init__(self, db_path=None):
-        if db_path is None:
-            os.makedirs("data", exist_ok=True)
-            db_path = os.path.join("data", "murojaatlar.db")
-        self.db_path = db_path
+        data_dir = os.path.join(BASE_DIR, "data")
+        os.makedirs(data_dir, exist_ok=True)
         
-        # credentials.json fayli data ichida yoki asosiy papkada bo'lishi mumkin
-        self.json_key_path = os.path.join("data", "credentials.json")
+        self.db_path = db_path if db_path else os.path.join(data_dir, "murojaatlar.db")
+        
+        # credentials.json fayli data ichida yoki .exe yonida bo'lishi mumkin
+        self.json_key_path = os.path.join(data_dir, "credentials.json")
         if not os.path.exists(self.json_key_path):
-            self.json_key_path = "credentials.json"
+            self.json_key_path = os.path.join(BASE_DIR, "credentials.json")
             
-        # Jadvalingizning aniq ID raqami
         self.sheet_id = "17igQpL4sNkEyQnIkJ58oqWVKQpVHh0mj4njx-UJXN34"
         
         self.gsheet_headers = [
@@ -34,18 +40,15 @@ class DatabaseManager:
             'Javob bergan', 'Javob sanasi', 'Ijro_Holati', 'Organish_Natijasi', 
             'Biriktirilgan_Fayl', 'Masul_Komplayens', 'Chora_Turi', 'Manba'
         ]
-        
         self.users_headers = ['ID', 'Username', 'Password', 'Role', 'Active']
         
         self._init_db()
         self._auto_backup()
         
-        # Bulutga (Google Sheets) ID orqali to'g'ridan-to'g'ri ulanish
         self.client = self._connect_gsheets()
         self.sheet = self._ensure_worksheet_and_headers()
         self.users_sheet = self._ensure_users_worksheet()
         
-        # Dastur ochilishi bilan bulut va lokal baza o'rtasida to'liq sinxronizatsiya
         self._sync_all()
 
     def _get_connection(self):
@@ -54,7 +57,7 @@ class DatabaseManager:
     def _auto_backup(self):
         try:
             if os.path.exists(self.db_path):
-                backup_dir = os.path.join("data", "backup")
+                backup_dir = os.path.join(BASE_DIR, "data", "backup")
                 os.makedirs(backup_dir, exist_ok=True)
                 today_str = datetime.now().strftime("%Y_%m_%d")
                 b_path = os.path.join(backup_dir, f"murojaatlar_{today_str}.db")
@@ -77,14 +80,12 @@ class DatabaseManager:
                     manba TEXT DEFAULT 'Telegram bot'
                 )
             """)
-            
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS xodimlar (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, viloyat TEXT, tashkilot_turi TEXT,
                     fish TEXT, telefon TEXT, telegram_username TEXT
                 )
             """)
-            
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -94,7 +95,6 @@ class DatabaseManager:
                     active INTEGER DEFAULT 1
                 )
             """)
-            
             cursor.execute("SELECT COUNT(*) FROM users")
             if cursor.fetchone()[0] == 0:
                 cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("admin", "admin123", "admin"))
@@ -117,49 +117,46 @@ class DatabaseManager:
             conn.commit()
 
     def _connect_gsheets(self):
-        if not HAS_GSHEETS or not os.path.exists(self.json_key_path): 
+        if not HAS_GSHEETS or not os.path.exists(self.json_key_path):
             return None
         try:
-            scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+            scope = [
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"
+            ]
             creds = ServiceAccountCredentials.from_json_keyfile_name(self.json_key_path, scope)
             return gspread.authorize(creds)
-        except Exception: 
+        except Exception:
             return None
 
     def _ensure_worksheet_and_headers(self):
-        if self.client is None: 
-            return None
+        if self.client is None: return None
         try:
             spreadsheet = self.client.open_by_key(self.sheet_id)
-            try: 
+            try:
                 sheet = spreadsheet.worksheet("Murojaatlar")
-            except gspread.exceptions.WorksheetNotFound: 
+            except Exception:
                 sheet = spreadsheet.add_worksheet(title="Murojaatlar", rows="1000", cols="20")
-                
             headers = sheet.row_values(1)
             if not headers:
                 sheet.insert_row(self.gsheet_headers, 1)
-                sheet.format('A1:S1', {'textFormat': {'bold': True}})
             return sheet
-        except Exception: 
+        except Exception:
             return None
 
     def _ensure_users_worksheet(self):
-        if self.client is None: 
-            return None
+        if self.client is None: return None
         try:
             spreadsheet = self.client.open_by_key(self.sheet_id)
-            try: 
+            try:
                 sheet = spreadsheet.worksheet("Foydalanuvchilar")
-            except gspread.exceptions.WorksheetNotFound: 
+            except Exception:
                 sheet = spreadsheet.add_worksheet(title="Foydalanuvchilar", rows="100", cols="5")
-                
             headers = sheet.row_values(1)
             if not headers:
                 sheet.insert_row(self.users_headers, 1)
-                sheet.format('A1:E1', {'textFormat': {'bold': True}})
             return sheet
-        except Exception: 
+        except Exception:
             return None
 
     def _sync_all(self):
@@ -167,12 +164,10 @@ class DatabaseManager:
         self._sync_murojaatlar()
 
     def _sync_users(self):
-        if self.users_sheet is None: 
-            return
+        if self.users_sheet is None: return
         try:
             cloud_records = self.users_sheet.get_all_records()
             cloud_usernames = set()
-            
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 if cloud_records:
@@ -184,41 +179,31 @@ class DatabaseManager:
                             active = int(row.get('Active', 1))
                         except:
                             active = 1
-                        if not username or username == 'DELETED': 
-                            continue
+                        if not username or username == 'DELETED': continue
                         cloud_usernames.add(username)
-                        
                         cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
-                        exists = cursor.fetchone()
-                        if not exists:
-                            cursor.execute("INSERT INTO users (username, password, role, active) VALUES (?, ?, ?, ?)", 
-                                           (username, password, role, active))
+                        if not cursor.fetchone():
+                            cursor.execute("INSERT INTO users (username, password, role, active) VALUES (?, ?, ?, ?)", (username, password, role, active))
                         else:
-                            cursor.execute("UPDATE users SET password = ?, role = ?, active = ? WHERE username = ?", 
-                                           (password, role, active, username))
+                            cursor.execute("UPDATE users SET password = ?, role = ?, active = ? WHERE username = ?", (password, role, active, username))
                     conn.commit()
                 
                 cursor.execute("SELECT id, username, password, role, active FROM users WHERE active = 1")
                 local_users = cursor.fetchall()
-                
                 new_cloud_rows = []
                 for u in local_users:
-                    u_id, u_name, u_pass, u_role, u_act = u
-                    if u_name not in cloud_usernames:
-                        new_cloud_rows.append([str(u_id), str(u_name), str(u_pass), str(u_role), int(u_act)])
-                
+                    if u[1] not in cloud_usernames:
+                        new_cloud_rows.append([str(u[0]), str(u[1]), str(u[2]), str(u[3]), int(u[4])])
                 if new_cloud_rows:
                     self.users_sheet.append_rows(new_cloud_rows)
         except Exception:
             pass
 
     def _sync_murojaatlar(self):
-        if self.sheet is None: 
-            return
+        if self.sheet is None: return
         try:
             records = self.sheet.get_all_records()
             cloud_ids = set()
-            
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 if records:
@@ -230,10 +215,8 @@ class DatabaseManager:
                             continue
                         if m_id <= 9: continue
                         cloud_ids.add(m_id)
-                        
                         cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
-                        exists = cursor.fetchone()
-                        if not exists:
+                        if not cursor.fetchone():
                             cursor.execute("""
                                 INSERT INTO murojaatlar (
                                     id, yaratilgan_sana, fish, telefon, viloyat, tuman, yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan, javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi, manba
@@ -261,22 +244,19 @@ class DatabaseManager:
                 for r in local_rows:
                     if r[0] not in cloud_ids:
                         missing_in_cloud.append([str(x) if x is not None else "" for x in r])
-                
                 if missing_in_cloud:
                     self.sheet.append_rows(missing_in_cloud)
-        except Exception: 
+        except Exception:
             pass
 
     def check_user_login(self, username, password):
         username = str(username).strip()
         password = str(password).strip()
-        
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT role FROM users WHERE username = ? AND password = ? AND active = 1", (username, password))
             res = cursor.fetchone()
-            if res:
-                return res[0]
+            if res: return res[0]
                 
         if self.users_sheet is not None:
             try:
@@ -292,8 +272,7 @@ class DatabaseManager:
                     if u_name == username and u_pass == password and u_act == 1:
                         with self._get_connection() as conn:
                             cursor = conn.cursor()
-                            cursor.execute("INSERT OR REPLACE INTO users (username, password, role, active) VALUES (?, ?, ?, ?)", 
-                                           (u_name, u_pass, u_role, u_act))
+                            cursor.execute("INSERT OR REPLACE INTO users (username, password, role, active) VALUES (?, ?, ?, ?)", (u_name, u_pass, u_role, u_act))
                             conn.commit()
                         return u_role
             except Exception:
@@ -324,12 +303,11 @@ class DatabaseManager:
                 conn.commit()
             self._sync_single_user_to_cloud(user_id, username, password, role, 1)
             return True
-        except: 
+        except Exception:
             return False
 
     def delete_user(self, user_id):
-        if str(user_id) == "1": 
-            return False
+        if str(user_id) == "1": return False
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
@@ -338,8 +316,7 @@ class DatabaseManager:
         return True
 
     def _sync_single_user_to_cloud(self, user_id, username, password, role, active=1):
-        if self.users_sheet is None: 
-            return
+        if self.users_sheet is None: return
         def push_user():
             try:
                 values = [str(user_id), str(username), str(password), str(role), int(active)]
@@ -352,35 +329,33 @@ class DatabaseManager:
                     self.users_sheet.update(f"A{cell.row}:E{cell.row}", [values])
                 else:
                     self.users_sheet.append_row(values)
-            except Exception: 
+            except Exception:
                 pass
         threading.Thread(target=push_user, daemon=True).start()
 
     def _sync_single_row_to_cloud(self, row_data):
-        if self.sheet is None: 
-            return
+        if self.sheet is None: return
         def push_data():
             try:
                 m_id = str(row_data[0])
                 cell = self.sheet.find(m_id, in_column=1)
                 values = [str(x) if x is not None else "" for x in row_data]
-                if cell: 
+                if cell:
                     self.sheet.update(f"A{cell.row}:S{cell.row}", [values])
-                else: 
+                else:
                     self.sheet.append_row(values)
-            except Exception: 
+            except Exception:
                 pass
         threading.Thread(target=push_data, daemon=True).start()
 
     def _sync_batch_to_cloud(self, new_rows_data_list):
-        if self.sheet is None or not new_rows_data_list: 
-            return
+        if self.sheet is None or not new_rows_data_list: return
         def push_batch():
             try:
                 batch_values = [[str(x) if x is not None else "" for x in r] for r in new_rows_data_list]
-                if batch_values: 
+                if batch_values:
                     self.sheet.append_rows(batch_values)
-            except Exception: 
+            except Exception:
                 pass
         threading.Thread(target=push_batch, daemon=True).start()
 
@@ -430,13 +405,12 @@ class DatabaseManager:
                         str(row.get('Holat', '')), str(row.get('Murojaat matni', '')), str(row.get('Javob', '')), str(row.get('Javob bergan', '')), 
                         str(row.get('Javob sanasi', '')), default_masul
                     ))
-                    
                     row_data = self._get_row_by_id(m_id)
-                    if row_data: 
+                    if row_data:
                         new_cloud_records.append(row_data)
             conn.commit()
             
-        if new_cloud_records: 
+        if new_cloud_records:
             self._sync_batch_to_cloud(new_cloud_records)
 
     def insert_phone_murojaat(self, fish, telefon, viloyat, tuman, yonalish, matn, masul_komplayens):
@@ -455,7 +429,7 @@ class DatabaseManager:
             conn.commit()
             
         row_data = self._get_row_by_id(new_id)
-        if row_data: 
+        if row_data:
             self._sync_single_row_to_cloud(row_data)
         return new_id
 
@@ -466,20 +440,20 @@ class DatabaseManager:
             conn.commit()
             
         row_data = self._get_row_by_id(m_id)
-        if row_data: 
+        if row_data:
             self._sync_single_row_to_cloud(row_data)
 
     def get_all_records(self):
         with self._get_connection() as conn:
             df = pd.read_sql_query("SELECT * FROM murojaatlar WHERE id > 9 ORDER BY id DESC", conn)
             df = df.rename(columns={'id': '#', 'yaratilgan_sana': 'Yaratilgan sana', 'fish': 'F.I.Sh.', 'telefon': 'Telefon', 'viloyat': 'Viloyat', 'tuman': 'Tuman', 'yonalish': 'Yoʻnalish', 'aniq_yonalish': 'Aniq_Yonalish', 'holat': 'Holat', 'murojaat_matni': 'Murojaat matni', 'javob': 'Javob', 'javob_bergan': 'Javob bergan', 'javob_sanasi': 'Javob sanasi', 'ijro_holati': 'Ijro_Holati', 'organish_natijasi': 'Organish_Natijasi', 'biriktirilgan_fayl': 'Biriktirilgan_Fayl', 'masul_komplayens': 'Masul_Komplayens', 'chora_turi': 'Chora_Turi', 'manba': 'Manba'})
-            if 'Manba' not in df.columns: 
+            if 'Manba' not in df.columns:
                 df['Manba'] = 'Telegram bot'
             df['Manba'] = df['Manba'].fillna('Telegram bot')
             return df
 
     def get_xodimlar(self):
-        with self._get_connection() as conn: 
+        with self._get_connection() as conn:
             return pd.read_sql_query("SELECT * FROM xodimlar ORDER BY viloyat ASC, tashkilot_turi ASC", conn)
 
     def save_xodim(self, x_id, fish, telefon, telegram_username):
@@ -494,6 +468,6 @@ class DatabaseManager:
             t_type = "Davlat kadastrlari palatasi" if "palata" in str(masul_str).lower() else "Kadastr agentligi"
             cursor.execute("SELECT fish, telefon, telegram_username FROM xodimlar WHERE viloyat = ? AND tashkilot_turi = ?", (viloyat, t_type))
             row = cursor.fetchone()
-            if row: 
+            if row:
                 return {"fish": row[0], "telefon": row[1], "username": row[2]}
             return {"fish": "Noma'lum", "telefon": "", "username": ""}
