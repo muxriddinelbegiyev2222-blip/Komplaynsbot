@@ -1,10 +1,27 @@
 import sys
 import os
+import ssl
 import sqlite3
 import pandas as pd
 import shutil
 import threading
 from datetime import datetime
+import urllib3
+import requests
+
+# Korporativ tarmoq va antiviruslar SSL tekshiruvini chetlab o'tish (SSL xatosini bartaraf qilish)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+_orig_session_init = requests.Session.__init__
+def _no_ssl_session_init(self, *args, **kwargs):
+    _orig_session_init(self, *args, **kwargs)
+    self.verify = False
+requests.Session.__init__ = _no_ssl_session_init
+
+try:
+    ssl._create_default_https_context = ssl._create_unverified_context
+except Exception:
+    pass
 
 # .exe fayl turgan haqiqiy papkani aniqlash
 if getattr(sys, 'frozen', False):
@@ -55,7 +72,7 @@ class DatabaseManager:
             
         log(f"2. Kalit manzili: {self.json_key_path} | Fayl mavjudmi: {os.path.exists(self.json_key_path)}")
         
-        self.sheet_id = "17igQpL4sNkEyQnIkJ58oqWVKQpVHh0mj4njx-UJXN34"
+        self.sheet_name = "Murojaatlar_Bazasi"
         
         self.gsheet_headers = [
             '#', 'Yaratilgan sana', 'F.I.Sh.', 'Telefon', 'Viloyat', 'Tuman', 
@@ -152,17 +169,24 @@ class DatabaseManager:
             ]
             creds = ServiceAccountCredentials.from_json_keyfile_name(self.json_key_path, scope)
             client = gspread.authorize(creds)
+            if hasattr(client, 'http_client') and hasattr(client.http_client, 'session'):
+                client.http_client.session.verify = False
             log("3. Google Sheets bilan ulanish muvaffaqiyatli (OK)")
             return client
         except Exception as e:
             log(f"3. XATO: Google Sheets ga ulanishda xato: {e}")
             return None
 
+    def _open_spreadsheet(self):
+        if self.client is None:
+            return None
+        return self.client.open(self.sheet_name)
+
     def _ensure_worksheet_and_headers(self):
         if self.client is None:
             return None
         try:
-            spreadsheet = self.client.open_by_key(self.sheet_id)
+            spreadsheet = self._open_spreadsheet()
             try:
                 sheet = spreadsheet.worksheet("Murojaatlar")
             except Exception:
@@ -171,6 +195,8 @@ class DatabaseManager:
             if not headers:
                 sheet.insert_row(self.gsheet_headers, 1)
                 log("4. 'Murojaatlar' varaqasiga sarlavhalar yozildi (OK)")
+            else:
+                log("4. 'Murojaatlar' varaqasi topildi (OK)")
             return sheet
         except Exception as e:
             log(f"4. XATO: 'Murojaatlar' varaqasi xatosi: {e}")
@@ -180,7 +206,7 @@ class DatabaseManager:
         if self.client is None:
             return None
         try:
-            spreadsheet = self.client.open_by_key(self.sheet_id)
+            spreadsheet = self._open_spreadsheet()
             try:
                 sheet = spreadsheet.worksheet("Foydalanuvchilar")
             except Exception:
@@ -189,6 +215,8 @@ class DatabaseManager:
             if not headers:
                 sheet.insert_row(self.users_headers, 1)
                 log("5. 'Foydalanuvchilar' varaqasiga sarlavhalar yozildi (OK)")
+            else:
+                log("5. 'Foydalanuvchilar' varaqasi topildi (OK)")
             return sheet
         except Exception as e:
             log(f"5. XATO: 'Foydalanuvchilar' varaqasi xatosi: {e}")
