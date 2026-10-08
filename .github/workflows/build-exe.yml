@@ -28,7 +28,9 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path "assets"
           if (Test-Path "create_icon.py") { python create_icon.py }
-          if (Test-Path "icon.ico") { Copy-Item "icon.ico" -Destination "assets\icon.ico" -Force }
+          if (-not (Test-Path "assets\icon.ico")) {
+            if (Test-Path "icon.ico") { Copy-Item "icon.ico" -Destination "assets\icon.ico" -Force }
+          }
 
       - name: EXE yaratish (PyInstaller)
         shell: pwsh
