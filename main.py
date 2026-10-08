@@ -41,17 +41,16 @@ class LoginWindow(ctk.CTk):
         user = self.username.get().strip()
         pwd = self.password.get().strip()
 
-        # Tizim bazasidan (users jadvalidan) tekshirish (ROLI bilan birga oladi)
+        # Tizim bazasidan (users jadvalidan) tekshirish
         role = self.db.check_user_login(user, pwd)
         
         if role:
             self.destroy()
-            # Dasturga faqat rolni emas, ismini ham berib yuboramiz
-            start_app(username=user, role=role)
+            start_app(role=role)
         else:
             messagebox.showerror("Xatolik", "Login yoki parol noto'g'ri yoxud akkaunt bloklangan!")
 
-def start_app(username, role):
+def start_app(role):
     # Dastur ishlashi uchun kerakli papkalarni yaratish
     os.makedirs("data", exist_ok=True)
     os.makedirs(os.path.join("data", "attachments"), exist_ok=True)
@@ -59,13 +58,9 @@ def start_app(username, role):
     os.makedirs(os.path.join("data", "backup"), exist_ok=True)
     os.makedirs("assets", exist_ok=True)
 
-    try:
-        data_loader = DataLoader()
-    except Exception:
-        data_loader = None
-        
-    # Asosiy oynani to'liq sozlamalar bilan ochish
-    app = DashboardApp(data_loader=data_loader, username=username, role=role)
+    data_loader = DataLoader()
+    # MANA SHU YERDA ZANJIR ASL HOLIGA QAYTARILDI:
+    app = DashboardApp(data_loader, current_role=role)
     app.mainloop()
 
 if __name__ == "__main__":
