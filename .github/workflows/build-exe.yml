@@ -23,20 +23,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Belgini (icon) yaratish va papkani tayyorlash
-        shell: pwsh
+      - name: Belgini (icon) yaratish
         run: |
-          New-Item -ItemType Directory -Force -Path "assets"
-          if (Test-Path "create_icon.py") { python create_icon.py }
-          if (-not (Test-Path "assets\icon.ico")) {
-            if (Test-Path "icon.ico") { Copy-Item "icon.ico" -Destination "assets\icon.ico" -Force }
-          }
+          python create_icon.py
 
       - name: EXE yaratish (PyInstaller)
         shell: pwsh
         run: |
-          $iconArg = if (Test-Path "assets\icon.ico") { '--icon="assets\icon.ico"' } elseif (Test-Path "icon.ico") { '--icon="icon.ico"' } else { '' }
-          Invoke-Expression "pyinstaller --noconsole --onefile --name ""Korrupsiya_Monitoring"" $iconArg --hidden-import=gspread --hidden-import=oauth2client --hidden-import=oauth2client.service_account --hidden-import=google.auth --hidden-import=openpyxl --hidden-import=pandas --hidden-import=requests --hidden-import=urllib3 --hidden-import=PIL main.py"
+          if (Test-Path "assets\icon.ico") {
+            pyinstaller --noconsole --onefile --name "Korrupsiya_Monitoring" --icon="assets/icon.ico" --hidden-import=gspread --hidden-import=oauth2client --hidden-import=oauth2client.service_account --hidden-import=google.auth --hidden-import=openpyxl --hidden-import=pandas --hidden-import=requests --hidden-import=urllib3 --hidden-import=PIL main.py
+          } else {
+            pyinstaller --noconsole --onefile --name "Korrupsiya_Monitoring" --hidden-import=gspread --hidden-import=oauth2client --hidden-import=oauth2client.service_account --hidden-import=google.auth --hidden-import=openpyxl --hidden-import=pandas --hidden-import=requests --hidden-import=urllib3 --hidden-import=PIL main.py
+          }
 
       - name: EXE faylni saqlash (Artifact)
         uses: actions/upload-artifact@v4
