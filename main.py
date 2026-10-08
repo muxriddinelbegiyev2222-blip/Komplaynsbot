@@ -1,5 +1,6 @@
 import os
 import sys
+import tkinter as tk
 import customtkinter as ctk
 from tkinter import messagebox
 from src.data_loader import DataLoader
@@ -7,22 +8,34 @@ from src.ui_dashboard import DashboardApp
 from src.db_manager import DatabaseManager
 
 
-class LoginWindow(ctk.CTk):
+class App(ctk.CTk):
+    """Bitta root oyna: login ham, dashboard ham shu yerda ishlaydi."""
     def __init__(self):
         super().__init__()
-        self.title("Tizimga kirish - Komplayens Nazorat")
-        self.geometry("450x380")
-        self.eval('tk::PlaceWindow . center')
         ctk.set_appearance_mode("Light")
         self.configure(fg_color="#ECEFF4")
+        self.title("Komplayens Nazorat")
+        self.geometry("450x380")
+        self.eval('tk::PlaceWindow . center')
+
+        # Kerakli papkalar
+        os.makedirs("data", exist_ok=True)
+        os.makedirs(os.path.join("data", "attachments"), exist_ok=True)
+        os.makedirs(os.path.join("data", "topshiriqlar"), exist_ok=True)
+        os.makedirs(os.path.join("data", "backup"), exist_ok=True)
+        os.makedirs("assets", exist_ok=True)
 
         self.db = DatabaseManager()
         self.data_loader = None
-        self._build_login_ui()
+        self.dashboard = None
+        self._show_login()
 
-    def _build_login_ui(self):
+    def _show_login(self):
         for w in self.winfo_children():
             w.destroy()
+
+        self.title("Tizimga kirish - Komplayens Nazorat")
+        self.geometry("450x380")
 
         frame = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=10,
                              border_width=1, border_color="#CBD5E1")
@@ -47,19 +60,17 @@ class LoginWindow(ctk.CTk):
         self.password = ctk.CTkEntry(frame, placeholder_text="Maxfiy so'z",
                                       show="*", width=300, height=35)
         self.password.pack(pady=(5, 20))
-        self.password.bind("<Return>", lambda e: self.check_login())
+        self.password.bind("<Return>", lambda e: self._check_login())
 
         ctk.CTkButton(frame, text="Tizimga kirish ➔", width=300, height=40,
                       fg_color="#1B4D7E", hover_color="#1E3A56",
                       font=ctk.CTkFont(size=14, weight="bold"),
-                      command=self.check_login).pack()
+                      command=self._check_login).pack()
 
-    def check_login(self):
+    def _check_login(self):
         user = self.username.get().strip()
         pwd = self.password.get().strip()
-
         role = self.db.check_user_login(user, pwd)
-
         if role:
             self._launch_dashboard(role)
         else:
@@ -67,46 +78,37 @@ class LoginWindow(ctk.CTk):
                                  "Login yoki parol noto'g'ri yoxud akkaunt bloklangan!")
 
     def _launch_dashboard(self, role):
-        """Login oynasining O'ZINI dashboard'ga aylantiradi (yangi CTk yaratmaydi)."""
-        # Kerakli papkalar
-        os.makedirs("data", exist_ok=True)
-        os.makedirs(os.path.join("data", "attachments"), exist_ok=True)
-        os.makedirs(os.path.join("data", "topshiriqlar"), exist_ok=True)
-        os.makedirs(os.path.join("data", "backup"), exist_ok=True)
-        os.makedirs("assets", exist_ok=True)
-
-        # Login oynasini yashirish
+        # Login UI'ni o'chirish
         for w in self.winfo_children():
             w.destroy()
 
-        # Dashboard'ni qurish uchun maxsus yondashuv:
-        # DashboardApp'ni alohida oyna sifatida emas, balki mavjud root ichida quramiz
+        # Root oynani dashboard uchun tayyorlash
+        self.title("Komplayens Nazorat Tizimi")
+        self.geometry("1440x920")
+        self.minsize(1220, 740)
+        self.eval('tk::PlaceWindow . center')
+
         try:
             self.data_loader = DataLoader()
         except Exception as e:
-            messagebox.showerror("Xatolik", f"Ma'lumotlar bazasini yuklab bo'lmadi:\n{e}")
+            messagebox.showerror("Xatolik",
+                                 f"Ma'lumotlar bazasini yuklab bo'lmadi:\n{e}")
+            self._show_login()
             return
 
-        # Root oynani dashboard uchun tayyorlaymiz
-        self.withdraw()  # yashirin
-
-        # MUHIM: DashboardApp yangi CTk emas, lekin biz uning UI qismini
-        # to'g'ridan-to'g'ri chaqira olmaymiz. Shuning uchun eng oson yo'l:
-        # LoginWindow'ni yo'q qilmasdan, uning ichida DashboardApp'ni
-        # Toplevel sifatida ochish.
-        self._open_dashboard_window(role)
-
-    def _open_dashboard_window(self, role):
-        """Dashboard'ni alohida oyna sifatida ochadi (login yopiq qoladi)."""
+        # Dashboard'ni mavjud root ichida quramiz
         try:
-            dash = DashboardApp(self.data_loader, current_role=role)
-            dash.mainloop()
+            self.dashboard = DashboardApp.__new__(DashboardApp)
+            # DashboardApp'ni CTk o'rniga mavjud root ustida ishga tushirish
+            # Buning uchun ui_dashboard.py da kichik o'zgarish kerak (pastga qarang)
+            DashboardApp.__init__(self.dashboard, self.data_loader, current_role=role,
+                                  _root_override=self)
         except Exception as e:
             messagebox.showerror("Xatolik",
                                  f"Dashboard ochilmadi:\n{type(e).__name__}: {e}")
-            self.deiconify()  # login oynasini qaytarish
+            self._show_login()
 
 
 if __name__ == "__main__":
-    login_app = LoginWindow()
-    login_app.mainloop()
+    app = App()
+    app.mainloop()
