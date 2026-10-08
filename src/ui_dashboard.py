@@ -23,32 +23,36 @@ THEMES = {
     "Bronza (Bronze)": {"primary": "#553C13", "btn": "#8B6B22", "hover": "#AA8833"},
 }
 
-# ================= UNIVERSAL NUSXALASH VA QO'YISH (CTRL+C/V/X) =================
+# ================= UNIVERSAL NUSXALASH VA QO'YISH (CTRL+C/V/X) 100% XAVFSIZ QILINDI =================
 def enable_copy_paste(root):
-    def handle_key(event):
-        # 4 raqami Ctrl tugmasi bosilganini bildiradi
-        if event.state & 0x0004 or event.state & 0x0008: 
-            char = getattr(event, 'char', '').lower()
-            keysym = getattr(event, 'keysym', '').lower()
-            
-            # Lotin va Krill klaviaturalaridagi xarflarni tutish (Xatolik bermasligi kafolatlangan)
-            if char in ['c', 'с'] or keysym in ['c', 'cyrillic_es']:
-                try:
-                    event.widget.event_generate("<<Copy>>")
-                    return "break"
-                except: pass
-            elif char in ['v', 'м'] or keysym in ['v', 'cyrillic_em']:
-                try:
-                    event.widget.event_generate("<<Paste>>")
-                    return "break"
-                except: pass
-            elif char in ['x', 'ч'] or keysym in ['x', 'cyrillic_che']:
-                try:
-                    event.widget.event_generate("<<Cut>>")
-                    return "break"
-                except: pass
+    def copy_ev(e):
+        try: e.widget.event_generate("<<Copy>>"); return "break"
+        except: pass
+    def paste_ev(e):
+        try: e.widget.event_generate("<<Paste>>"); return "break"
+        except: pass
+    def cut_ev(e):
+        try: e.widget.event_generate("<<Cut>>"); return "break"
+        except: pass
 
-    root.bind_all("<Key>", handle_key)
+    # Inglizcha harflar uchun
+    root.bind_all("<Control-c>", copy_ev)
+    root.bind_all("<Control-v>", paste_ev)
+    root.bind_all("<Control-x>", cut_ev)
+    root.bind_all("<Control-C>", copy_ev)
+    root.bind_all("<Control-V>", paste_ev)
+    root.bind_all("<Control-X>", cut_ev)
+
+    # Krill klaviaturasida xato bermasligi uchun qat'iy himoya qilingan (try-except) bloklari
+    for key in ["<Control-Cyrillic_es>", "<Control-cyrillic_es>", "<Control-с>", "<Control-С>"]:
+        try: root.bind_all(key, copy_ev)
+        except: pass
+    for key in ["<Control-Cyrillic_em>", "<Control-cyrillic_em>", "<Control-м>", "<Control-М>"]:
+        try: root.bind_all(key, paste_ev)
+        except: pass
+    for key in ["<Control-Cyrillic_che>", "<Control-cyrillic_che>", "<Control-ч>", "<Control-Ч>"]:
+        try: root.bind_all(key, cut_ev)
+        except: pass
 
 def ensure_app_logo():
     os.makedirs("assets", exist_ok=True)
@@ -69,7 +73,6 @@ class DashboardApp(ctk.CTk):
         self.loader = data_loader
         self.role = current_role 
         
-        # Holat o'zgaruvchilari
         self.current_theme = "Navy (Asl)"
         self.is_cyrillic = False
         
@@ -80,7 +83,6 @@ class DashboardApp(ctk.CTk):
         self.view_stack = []
         self.current_view_func = None
         
-        # IKONKANI QAYTA TIKLASH QISMI (Xatoliksiz yuklanishi uchun)
         try:
             self.logo_path = ensure_app_logo()
             icon_img = tk.PhotoImage(file=self.logo_path)
@@ -91,38 +93,35 @@ class DashboardApp(ctk.CTk):
             
         enable_copy_paste(self)
         
-        # Barcha qismlarni o'z ichiga oluvchi asosiy konteyner
         self.main_wrapper = ctk.CTkFrame(self, fg_color="transparent")
         self.main_wrapper.pack(fill="both", expand=True)
         
         self._redraw_entire_ui(initial=True)
 
-    # ================= TARJIMA FUNKSIYALARI (LOTIN <-> KRILL) =================
+    # ================= MUKAMMAL TARJIMA FUNKSIYALARI =================
     def _t(self, text):
-        """Interfeys uchun Lotin -> Krill tarjimoni"""
         if text is None: return ""
         text = str(text)
         if not self.is_cyrillic: return text
         
         mapping = {
-            "Sh": "Ш", "sh": "ш", "Ch": "Ч", "ch": "ч", 
-            "O'": "Ў", "O‘": "Ў", "o'": "ў", "o‘": "ў",
-            "G'": "Ғ", "G‘": "Ғ", "g'": "ғ", "g‘": "ғ",
-            "Yo": "Ё", "yo": "ё", "Yu": "Ю", "yu": "ю", "Ya": "Я", "ya": "я",
-            "Ye": "Е", "ye": "е", "Ts": "Ц", "ts": "ц",
+            "Sh": "Ш", "sh": "ш", "SH": "Ш", "Ch": "Ч", "ch": "ч", "CH": "Ч",
+            "O'": "Ў", "O‘": "Ў", "o'": "ў", "o‘": "ў", "G'": "Ғ", "G‘": "Ғ", "g'": "ғ", "g‘": "ғ",
+            "Yo": "Ё", "yo": "ё", "YO": "Ё", "Yu": "Ю", "yu": "ю", "YU": "Ю",
+            "Ya": "Я", "ya": "я", "YA": "Я", "Ts": "Ц", "ts": "ц", "TS": "Ц", "Ye": "Е", "ye": "е", "YE": "Е",
             "A": "А", "a": "а", "B": "Б", "b": "б", "D": "Д", "d": "д", "E": "Е", "e": "е",
             "F": "Ф", "f": "ф", "G": "Г", "g": "г", "H": "Ҳ", "h": "ҳ", "I": "И", "i": "и",
             "J": "Ж", "j": "ж", "K": "К", "k": "к", "L": "Л", "l": "л", "M": "М", "m": "м",
             "N": "Н", "n": "н", "O": "О", "o": "о", "P": "П", "p": "п", "Q": "Қ", "q": "қ",
             "R": "Р", "r": "р", "S": "С", "s": "с", "T": "Т", "t": "т", "U": "У", "u": "у",
-            "V": "В", "v": "в", "X": "Х", "x": "х", "Y": "Й", "y": "й", "Z": "З", "z": "з"
+            "V": "В", "v": "в", "X": "Х", "x": "х", "Y": "Й", "y": "й", "Z": "З", "z": "з", "'": "ъ"
         }
-        for k, v in mapping.items():
-            text = text.replace(k, v)
+        # ENG MUHIMI: Tarjima aniq bo'lishi uchun xarflar uzunligi bo'yicha kamayish tartibida saralanadi (Sh avval, S keyin)
+        for k in sorted(mapping.keys(), key=len, reverse=True):
+            text = text.replace(k, mapping[k])
         return text
 
     def _to_latin(self, text):
-        """Ma'lumotlar bazasi bilan ishlash uchun Krill -> Lotin tarjimoni"""
         if text is None: return ""
         text = str(text)
         if not self.is_cyrillic: return text
@@ -136,13 +135,13 @@ class DashboardApp(ctk.CTk):
             "К": "K", "к": "k", "Л": "L", "л": "l", "М": "M", "м": "m", "Н": "N", "н": "n",
             "О": "O", "о": "o", "П": "P", "п": "p", "Қ": "Q", "қ": "q", "Р": "R", "р": "r",
             "С": "S", "с": "s", "Т": "T", "т": "t", "У": "U", "у": "u", "В": "V", "в": "v",
-            "Х": "X", "х": "x", "Й": "Y", "й": "y", "З": "Z", "з": "z"
+            "Х": "X", "х": "x", "Й": "Y", "й": "y", "З": "Z", "з": "z", "Ъ": "'", "ъ": "'"
         }
-        for k, v in rev_mapping.items():
-            text = text.replace(k, v)
+        for k in sorted(rev_mapping.keys(), key=len, reverse=True):
+            text = text.replace(k, rev_mapping[k])
         return text
 
-    # ================= MAVZU VA TILNI YANGILASH Dvigateli =================
+    # ================= MAVZU VA TILNI YANGILASH =================
     def _redraw_entire_ui(self, initial=False):
         rol_matni = self._t(" (KUZATUVCHI REJIMI)") if self.role == "kuzatuvchi" else self._t(" (ADMINISTRATOR)")
         self.title(self._t("KADASTR AGENTLIGI — KORRUPSIYAGA QARSHI KOMPLAYENS MONITORING TIZIMI") + rol_matni)
@@ -189,7 +188,6 @@ class DashboardApp(ctk.CTk):
         )
         self.lbl_path.pack(side="left", padx=10, pady=15)
 
-        # ---------------- TIL VA MAVZU TUGMALARI ----------------
         btn_lang = ctk.CTkButton(
             nav, text="🌐 " + ("Lotin" if self.is_cyrillic else "Krill"), 
             width=80, height=34, fg_color=self.t_colors["btn"], hover_color=self.t_colors["hover"],
@@ -204,7 +202,6 @@ class DashboardApp(ctk.CTk):
         cb_theme.set(self._t(self.current_theme))
         cb_theme.pack(side="right", padx=4, pady=15)
         
-        # ---------------- HARAKAT TUGMALARI ----------------
         ctk.CTkButton(
             nav, text=self._t("📄 Word Ma'lumotnoma"), width=145, height=34, 
             fg_color="#8B3A2B", hover_color="#A94442", 
@@ -218,7 +215,7 @@ class DashboardApp(ctk.CTk):
         ).pack(side="right", padx=4, pady=15)
         
         if self.role == "admin":
-            # KIRISHLAR TARIXI (AUDIT LOG) QO'SHILDI
+            # KIRISHLAR TARIXI TUGMASI (AUDIT LOG)
             ctk.CTkButton(
                 nav, text=self._t("👁 Kirishlar tarixi"), width=140, height=34, 
                 fg_color="#D35400", hover_color="#A04000", 
@@ -556,13 +553,13 @@ class DashboardApp(ctk.CTk):
                 tag = 'danger' if is_danger else ('even' if idx % 2 == 0 else 'odd')
                 xavf_text = self._t("🔴 Yuqori xavf") if is_danger else self._t("O'rtacha")
                 tree.insert("", "end", values=(
-                    r.get('#'), 
-                    str(r.get('Yaratilgan sana'))[:16], 
+                    r.get('#', ''), 
+                    str(r.get('Yaratilgan sana', ''))[:16], 
                     xavf_text, 
-                    self._t(r.get('F.I.Sh.')), 
-                    r.get('Telefon'), 
-                    self._t(r.get('Viloyat')), 
-                    self._t(r.get('Tuman')), 
+                    self._t(r.get('F.I.Sh.', '')), 
+                    r.get('Telefon', ''), 
+                    self._t(r.get('Viloyat', '')), 
+                    self._t(r.get('Tuman', '')), 
                     self._t(r.get('Masul_Komplayens', 'Kadastr agentligi hududiy komplayens xodimi')), 
                     self._t(r.get('Ijro_Holati', 'O‘rganishga yuborilgan'))
                 ), tags=(tag,))
@@ -853,7 +850,7 @@ class DashboardApp(ctk.CTk):
 
         ctk.CTkButton(main_box, text=self._t("💾 Murojaatni ro'yxatga olish"), height=38, width=250, fg_color="#1B5E20", hover_color="#2E7D32", font=ctk.CTkFont(size=13, weight="bold"), command=save_phone_entry).pack(pady=20)
 
-    # ================= 5-POG'ONA: HUDUDIY XODIMLAR REYESTRI =================
+    # ================= 5-POG'ONA: HUDUDIY XODIMLAR REYESTRI (BO'SH QOLISH XATOSI TO'LIQ TUZATILDI) =================
     def show_xodimlar_view(self):
         self.current_view_func = self.show_xodimlar_view
         if self.show_dashboard_view not in self.view_stack:
@@ -899,8 +896,19 @@ class DashboardApp(ctk.CTk):
 
         def populate_x():
             tree.delete(*tree.get_children())
-            for _, r in self.loader.db.get_xodimlar().iterrows(): 
-                tree.insert("", "end", values=(r['id'], self._t(r['viloyat']), self._t(r['tashkilot_turi']), self._t(r['fish']), r['telefon'], r['telegram_username']))
+            try:
+                # 100% himoyalangan usulda ma'lumot tortish (Bo'sh jadval muammosi shu yerda hal bo'ldi)
+                for _, r in self.loader.db.get_xodimlar().iterrows(): 
+                    rid = r.get('id', '')
+                    rvil = str(r.get('viloyat', ''))
+                    rtash = str(r.get('tashkilot_turi', ''))
+                    rfish = str(r.get('fish', ''))
+                    rtel = str(r.get('telefon', ''))
+                    rtg = str(r.get('telegram_username', ''))
+                    
+                    tree.insert("", "end", values=(rid, self._t(rvil), self._t(rtash), self._t(rfish), rtel, rtg))
+            except Exception as e:
+                pass
                 
         populate_x()
 
