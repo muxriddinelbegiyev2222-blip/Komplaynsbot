@@ -12,64 +12,43 @@ from src.report_generator import ReportGenerator
 # ================= 10 XIL RANG VA MAVZULAR BAZASI =================
 THEMES = {
     "Navy (Asl)": {"primary": "#0F2537", "btn": "#1E3A56", "hover": "#2A4D73"},
-    "Qora (Dark)": {"primary": "#111827", "btn": "#1F2937", "hover": "#374151"},
-    "Yashil (Emerald)": {"primary": "#064E3B", "btn": "#047857", "hover": "#059669"},
-    "Tungi (Midnight)": {"primary": "#1E3A8A", "btn": "#1D4ED8", "hover": "#2563EB"},
-    "Siyohrang (Purple)": {"primary": "#4C1D95", "btn": "#5B21B6", "hover": "#6D28D9"},
-    "To'q Qizil (Crimson)": {"primary": "#7F1D1D", "btn": "#991B1B", "hover": "#B91C1C"},
-    "Dengiz (Teal)": {"primary": "#134E4A", "btn": "#0F766E", "hover": "#0D9488"},
-    "Indigo (Deep)": {"primary": "#312E81", "btn": "#4338CA", "hover": "#4F46E5"},
-    "Kulrang (Slate)": {"primary": "#1E293B", "btn": "#334155", "hover": "#475569"},
-    "Kofeyniy (Mocha)": {"primary": "#451A03", "btn": "#78350F", "hover": "#92400E"},
+    "Tungi (Midnight)": {"primary": "#1E3A8A", "btn": "#2563EB", "hover": "#3B82F6"},
+    "O'rmon (Forest)": {"primary": "#064E3B", "btn": "#059669", "hover": "#10B981"},
+    "Bordo (Crimson)": {"primary": "#7F1D1D", "btn": "#B91C1C", "hover": "#DC2626"},
+    "Binafsha (Purple)": {"primary": "#4C1D95", "btn": "#7C3AED", "hover": "#8B5CF6"},
+    "Kofe (Mocha)": {"primary": "#451A03", "btn": "#92400E", "hover": "#B45309"},
+    "Dengiz (Teal)": {"primary": "#134E4A", "btn": "#0F766E", "hover": "#14B8A6"},
+    "Qora (Dark)": {"primary": "#111827", "btn": "#374151", "hover": "#4B5563"},
+    "Kulrang (Slate)": {"primary": "#334155", "btn": "#475569", "hover": "#64748B"},
+    "Bronza (Bronze)": {"primary": "#553C13", "btn": "#8B6B22", "hover": "#AA8833"},
 }
 
-# ================= UNIVERSAL NUSXALASH VA QO'YISH =================
+# ================= UNIVERSAL NUSXALASH VA QO'YISH (CTRL+C/V/X) =================
 def enable_copy_paste(root):
-    def copy(event):
-        try:
-            w = root.focus_get()
-            if hasattr(w, 'selection_get'):
-                text = w.selection_get()
-                root.clipboard_clear()
-                root.clipboard_append(text)
-        except: pass
-        return "break"
-
-    def paste(event):
-        try:
-            w = root.focus_get()
-            if hasattr(w, 'insert'):
-                text = root.clipboard_get()
+    def handle_key(event):
+        # 4 raqami Ctrl tugmasi bosilganini bildiradi
+        if event.state & 0x0004 or event.state & 0x0008: 
+            char = getattr(event, 'char', '').lower()
+            keysym = getattr(event, 'keysym', '').lower()
+            
+            # Lotin va Krill klaviaturalaridagi xarflarni tutish (Xatolik bermasligi kafolatlangan)
+            if char in ['c', 'с'] or keysym in ['c', 'cyrillic_es']:
                 try:
-                    if isinstance(w, (tk.Entry, ctk.CTkEntry)) and w.select_present():
-                        w.delete("sel.first", "sel.last")
-                    elif isinstance(w, (tk.Text, ctk.CTkTextbox)) and w.tag_ranges("sel"):
-                        w.delete("sel.first", "sel.last")
+                    event.widget.event_generate("<<Copy>>")
+                    return "break"
                 except: pass
-                w.insert("insert", text)
-        except: pass
-        return "break"
-
-    def cut(event):
-        try:
-            w = root.focus_get()
-            if hasattr(w, 'selection_get'):
-                text = w.selection_get()
-                root.clipboard_clear()
-                root.clipboard_append(text)
+            elif char in ['v', 'м'] or keysym in ['v', 'cyrillic_em']:
                 try:
-                    if isinstance(w, (tk.Entry, ctk.CTkEntry)) and w.select_present():
-                        w.delete("sel.first", "sel.last")
-                    elif isinstance(w, (tk.Text, ctk.CTkTextbox)) and w.tag_ranges("sel"):
-                        w.delete("sel.first", "sel.last")
+                    event.widget.event_generate("<<Paste>>")
+                    return "break"
                 except: pass
-        except: pass
-        return "break"
+            elif char in ['x', 'ч'] or keysym in ['x', 'cyrillic_che']:
+                try:
+                    event.widget.event_generate("<<Cut>>")
+                    return "break"
+                except: pass
 
-    # DASTURNI QULATMASLIGI UCHUN FAQAT STANDART TUGMALAR QOLDIRILDI
-    for key in ["<Control-c>", "<Control-C>"]: root.bind_all(key, copy)
-    for key in ["<Control-v>", "<Control-V>"]: root.bind_all(key, paste)
-    for key in ["<Control-x>", "<Control-X>"]: root.bind_all(key, cut)
+    root.bind_all("<Key>", handle_key)
 
 def ensure_app_logo():
     os.makedirs("assets", exist_ok=True)
@@ -101,10 +80,13 @@ class DashboardApp(ctk.CTk):
         self.view_stack = []
         self.current_view_func = None
         
+        # IKONKANI QAYTA TIKLASH QISMI (Xatoliksiz yuklanishi uchun)
         try:
             self.logo_path = ensure_app_logo()
+            icon_img = tk.PhotoImage(file=self.logo_path)
+            self.iconphoto(False, icon_img)
             self._icon_photo = ctk.CTkImage(Image.open(self.logo_path), size=(32, 32))
-        except: 
+        except Exception:
             self._icon_photo = None
             
         enable_copy_paste(self)
@@ -118,9 +100,10 @@ class DashboardApp(ctk.CTk):
     # ================= TARJIMA FUNKSIYALARI (LOTIN <-> KRILL) =================
     def _t(self, text):
         """Interfeys uchun Lotin -> Krill tarjimoni"""
-        if not self.is_cyrillic or not text:
-            return text
+        if text is None: return ""
         text = str(text)
+        if not self.is_cyrillic: return text
+        
         mapping = {
             "Sh": "Ш", "sh": "ш", "Ch": "Ч", "ch": "ч", 
             "O'": "Ў", "O‘": "Ў", "o'": "ў", "o‘": "ў",
@@ -140,9 +123,10 @@ class DashboardApp(ctk.CTk):
 
     def _to_latin(self, text):
         """Ma'lumotlar bazasi bilan ishlash uchun Krill -> Lotin tarjimoni"""
-        if not self.is_cyrillic or not text:
-            return text
+        if text is None: return ""
         text = str(text)
+        if not self.is_cyrillic: return text
+        
         rev_mapping = {
             "Ш": "Sh", "ш": "sh", "Ч": "Ch", "ч": "ch", "Ў": "O'", "ў": "o'",
             "Ғ": "G'", "ғ": "g'", "Ё": "Yo", "ё": "yo", "Ю": "Yu", "ю": "yu", 
@@ -234,7 +218,7 @@ class DashboardApp(ctk.CTk):
         ).pack(side="right", padx=4, pady=15)
         
         if self.role == "admin":
-            # KIRISHLAR TARIXI (AUDIT LOG)
+            # KIRISHLAR TARIXI (AUDIT LOG) QO'SHILDI
             ctk.CTkButton(
                 nav, text=self._t("👁 Kirishlar tarixi"), width=140, height=34, 
                 fg_color="#D35400", hover_color="#A04000", 
@@ -249,7 +233,7 @@ class DashboardApp(ctk.CTk):
             
             ctk.CTkButton(
                 nav, text=self._t("👥 Hududiy xodimlar"), width=140, height=34, 
-                fg_color="#4B3869", hover_color="#5E4784", 
+                fg_color=self.t_colors["btn"], hover_color=self.t_colors["hover"], 
                 font=ctk.CTkFont(size=11, weight="bold"), command=self.show_xodimlar_view
             ).pack(side="right", padx=4, pady=15)
             
@@ -743,9 +727,9 @@ class DashboardApp(ctk.CTk):
             
             nat_xom = tb_natija.get("1.0", "end-1c").strip()
             rec_updated['Organish_Natijasi'] = self._to_latin(nat_xom) if self.is_cyrillic else nat_xom
-            rec_updated['Ijro_Holati'] = self._to_latin(cb_status.get())
-            rec_updated['Chora_Turi'] = self._to_latin(cb_chora.get())
-            rec_updated['Masul_Komplayens'] = self._to_latin(cb_masul_item.get())
+            rec_updated['Ijro_Holati'] = self._to_latin(cb_status.get()) if self.is_cyrillic else cb_status.get()
+            rec_updated['Chora_Turi'] = self._to_latin(cb_chora.get()) if self.is_cyrillic else cb_chora.get()
+            rec_updated['Masul_Komplayens'] = self._to_latin(cb_masul_item.get()) if self.is_cyrillic else cb_masul_item.get()
             
             fp = filedialog.asksaveasfilename(defaultextension=".docx", initialfile=f"Xulosa_{m_id}.docx")
             if fp:
