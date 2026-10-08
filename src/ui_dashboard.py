@@ -145,8 +145,8 @@ CYR_TO_LAT = [
 
 
 class DashboardApp(ctk.CTk):
-    def __init__(self, data_loader, current_role="admin"):
-        super().__init__()
+        def __init__(self, data_loader, current_role="admin", master=None):
+        super().__init__(master)
         self.loader = data_loader
         self.role = current_role
 
@@ -201,7 +201,11 @@ class DashboardApp(ctk.CTk):
         return text
 
     # ================= UI QAYTA QURISH =================
-    def _redraw_entire_ui(self, initial=False):
+        def _redraw_entire_ui(self, initial=False):
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
         rol_matni = self._t(" (KUZATUVCHI REJIMI)") if self.role == "kuzatuvchi" else self._t(" (ADMINISTRATOR)")
         self.title(self._t("KADASTR AGENTLIGI — KORRUPSIYAGA QARSHI KOMPLAYENS MONITORING TIZIMI") + rol_matni)
 
