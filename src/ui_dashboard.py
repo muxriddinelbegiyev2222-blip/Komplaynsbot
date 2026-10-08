@@ -23,7 +23,7 @@ THEMES = {
     "Kofeyniy (Mocha)": {"primary": "#451A03", "btn": "#78350F", "hover": "#92400E"},
 }
 
-# ================= UNIVERSAL NUSXALASH VA QO'YISH (CTRL+C/V/X) =================
+# ================= UNIVERSAL NUSXALASH VA QO'YISH =================
 def enable_copy_paste(root):
     def copy(event):
         try:
@@ -66,13 +66,10 @@ def enable_copy_paste(root):
         except: pass
         return "break"
 
-    # Ingliz va Krill klaviatura tugmalari yuz foiz ishlashi uchun barcha variantlar qo'shildi
-    for key in ["<Control-c>", "<Control-C>", "<Control-с>", "<Control-С>"]:
-        root.bind_all(key, copy)
-    for key in ["<Control-v>", "<Control-V>", "<Control-м>", "<Control-М>"]:
-        root.bind_all(key, paste)
-    for key in ["<Control-x>", "<Control-X>", "<Control-ч>", "<Control-Ч>"]:
-        root.bind_all(key, cut)
+    # DASTURNI QULATMASLIGI UCHUN FAQAT STANDART TUGMALAR QOLDIRILDI
+    for key in ["<Control-c>", "<Control-C>"]: root.bind_all(key, copy)
+    for key in ["<Control-v>", "<Control-V>"]: root.bind_all(key, paste)
+    for key in ["<Control-x>", "<Control-X>"]: root.bind_all(key, cut)
 
 def ensure_app_logo():
     os.makedirs("assets", exist_ok=True)
@@ -237,7 +234,7 @@ class DashboardApp(ctk.CTk):
         ).pack(side="right", padx=4, pady=15)
         
         if self.role == "admin":
-            # KIRISHLAR TARIXI (AUDIT LOG) QO'SHILDI
+            # KIRISHLAR TARIXI (AUDIT LOG)
             ctk.CTkButton(
                 nav, text=self._t("👁 Kirishlar tarixi"), width=140, height=34, 
                 fg_color="#D35400", hover_color="#A04000", 
@@ -703,7 +700,6 @@ class DashboardApp(ctk.CTk):
         
         tb_natija = ctk.CTkTextbox(action_frame, height=90, wrap="word", font=ctk.CTkFont(size=12))
         
-        # Ekrandagi matn tilga qarab avtomatik o'girilishi
         natija_text = str(rec.get('Organish_Natijasi', ''))
         tb_natija.insert("1.0", self._t(natija_text) if self.is_cyrillic else natija_text)
         tb_natija.pack(fill="x", padx=15, pady=(0, 6))
@@ -730,7 +726,6 @@ class DashboardApp(ctk.CTk):
             ms = self._to_latin(cb_masul_item.get())
             ch = self._to_latin(cb_chora.get())
             
-            # Agar krillda turib yozsa, bazaga lotinda yozishi uchun o'giramiz
             nat_xom = tb_natija.get("1.0", "end-1c")
             nat = self._to_latin(nat_xom) if self.is_cyrillic else nat_xom
             
@@ -746,7 +741,6 @@ class DashboardApp(ctk.CTk):
         def download_resolution():
             rec_updated = self.loader.df[self.loader.df['#'] == m_id].iloc[0].copy()
             
-            # EKRANDAGI MA'LUMOTNI MAJBURIY USHLAB WORDGA YUBORISH:
             nat_xom = tb_natija.get("1.0", "end-1c").strip()
             rec_updated['Organish_Natijasi'] = self._to_latin(nat_xom) if self.is_cyrillic else nat_xom
             rec_updated['Ijro_Holati'] = self._to_latin(cb_status.get())
