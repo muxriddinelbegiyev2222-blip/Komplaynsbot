@@ -17,7 +17,7 @@ class LoginWindow(ctk.CTk):
         self.configure(fg_color="#ECEFF4")
 
         self.db = DatabaseManager()
-        self.dashboard_window = None
+        self.dashboard = None
 
         frame = ctk.CTkFrame(self, fg_color="#FFFFFF", corner_radius=10,
                              border_width=1, border_color="#CBD5E1")
@@ -62,7 +62,6 @@ class LoginWindow(ctk.CTk):
                                  "Login yoki parol noto'g'ri yoxud akkaunt bloklangan!")
 
     def open_dashboard(self, role):
-        """Login oynasini yashiradi va dashboard'ni CTkToplevel sifatida ochadi."""
         # Kerakli papkalar
         os.makedirs("data", exist_ok=True)
         os.makedirs(os.path.join("data", "attachments"), exist_ok=True)
@@ -70,34 +69,17 @@ class LoginWindow(ctk.CTk):
         os.makedirs(os.path.join("data", "backup"), exist_ok=True)
         os.makedirs("assets", exist_ok=True)
 
-        # Login oynasini yashirish (YO'Q QILMASDAN)
-        self.withdraw()
+        # Login oynasini butunlay yopish
+        self.destroy()
 
+        # Yangi CTk oyna sifatida Dashboard'ni ochish
         try:
             data_loader = DataLoader()
-            # Dashboard'ni alohida oyna sifatida ochish
-            self.dashboard_window = DashboardApp(
-                data_loader,
-                current_role=role,
-                master=self  # ← login oynasi ota-ona
-            )
-            # Dashboard yopilganda login oynasini qaytarish
-            self.dashboard_window.bind(
-                "<Destroy>",
-                lambda e: self._on_dashboard_close(e)
-            )
+            app = DashboardApp(data_loader, current_role=role)
+            app.mainloop()
         except Exception as e:
-            self.deiconify()  # login oynasini qaytarish
             messagebox.showerror("Xatolik",
                                  f"Dashboard ochilmadi:\n{type(e).__name__}: {e}")
-
-    def _on_dashboard_close(self, event):
-        """Dashboard yopilganda login oynasini qaytarish."""
-        if event.widget is self.dashboard_window:
-            self.dashboard_window = None
-            self.deiconify()
-            self.lift()
-            self.focus_force()
 
 
 if __name__ == "__main__":
