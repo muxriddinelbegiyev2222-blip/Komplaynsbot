@@ -1024,4 +1024,602 @@ class DashboardApp(ctk.CTk):
             self.lbl_file_status.configure(
                 text=f"📁 {self._t('Biriktirilgan hujjat:')} {os.path.basename(dest)}",
                 text_color="#0F2537")
-        except (OSError, shutil
+        except (OSError, shutil.SameFileError) as e:
+            messagebox.showerror(self._t("Xatolik"),
+                                 self._t(f"Faylni nusxalashda xato: {e}"))
+
+    def _open_attached_file(self):
+        if self.attached_file_path and os.path.exists(self.attached_file_path):
+            try:
+                if sys.platform == "win32":
+                    os.startfile(self.attached_file_path)
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", self.attached_file_path])
+                else:
+                    subprocess.Popen(["xdg-open", self.attached_file_path])
+            except (OSError, AttributeError) as e:
+                messagebox.showerror(self._t("Xatolik"),
+                                     self._t(f"Faylni ochishda xato: {e}"))
+        else:
+            messagebox.showwarning(self._t("Fayl yo'q"),
+                                   self._t("Ushbu murojaatga hali hech qanday hujjat biriktirilmagan!"))
+
+    def show_add_phone_view(self):
+        self._push_current_to_stack()
+        self.current_view_func = self.show_add_phone_view
+
+        self.btn_back.configure(state="normal")
+        self.lbl_path.configure(text=self._t(
+            "Asosiy oyna  /  Ishonch telefoni orqali murojaat qabul qilish (+998-71-273-19-66)"))
+        self._clear_container()
+
+        main_box = ctk.CTkFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
+                                border_width=1, border_color="#CBD5E1")
+        main_box.pack(fill="both", expand=True, padx=4, pady=4)
+
+        ctk.CTkLabel(main_box, text=self._t("📞 ISHONCH TELEFONI ORQALI MUROJAAT QABUL QILISH"),
+                     font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color="#0F2537").pack(pady=(20, 5))
+        ctk.CTkLabel(main_box,
+                     text=self._t("Ishonch raqami: +998-71-273-19-66 | "
+                                  "Kelib tushgan vaqt: Avtomatik joriy vaqt"),
+                     font=ctk.CTkFont(size=11, slant="italic"),
+                     text_color="#64748B").pack(pady=(0, 15))
+
+        form = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
+                            border_width=1, border_color="#CBD5E1")
+        form.pack(fill="x", padx=100, pady=10)
+
+        ctk.CTkLabel(form, text=self._t("Fuqaro F.I.Sh.:"),
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(15, 2))
+        e_fish = ctk.CTkEntry(form, placeholder_text=self._t("Familiyasi Ismi Otasining ismi"),
+                              width=500, font=ctk.CTkFont(size=12))
+        e_fish.pack(anchor="w", padx=20)
+
+        ctk.CTkLabel(form, text=self._t("Telefon raqami:"),
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(10, 2))
+        e_tel = ctk.CTkEntry(form, placeholder_text="+998901234567",
+                             width=500, font=ctk.CTkFont(size=12))
+        e_tel.insert(0, "+998")
+        e_tel.pack(anchor="w", padx=20)
+
+        row_geo = ctk.CTkFrame(form, fg_color="transparent")
+        row_geo.pack(fill="x", padx=20, pady=10)
+
+        ctk.CTkLabel(row_geo, text=self._t("Viloyat:"),
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 5))
+        cb_vil = ctk.CTkComboBox(
+            row_geo,
+            values=[self._t(v) for v in [
+                "Toshkent shahri", "Toshkent viloyati", "Samarqand viloyati", "Buxoro viloyati",
+                "Farg'ona viloyati", "Andijon viloyati", "Namangan viloyati", "Qashqadaryo viloyati",
+                "Surxondaryo viloyati", "Jizzax viloyati", "Sirdaryo viloyati", "Navoiy viloyati",
+                "Xorazm viloyati", "Qoraqalpog'iston Respublikasi"
+            ]], width=200, font=ctk.CTkFont(size=12))
+        cb_vil.pack(side="left", padx=(0, 20))
+
+        ctk.CTkLabel(row_geo, text=self._t("Tuman/Shahar:"),
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 5))
+        e_tum = ctk.CTkEntry(row_geo, placeholder_text=self._t("Tuman nomi"),
+                             width=180, font=ctk.CTkFont(size=12))
+        e_tum.pack(side="left")
+
+        ctk.CTkLabel(form, text=self._t("Yo'nalish tarmog'i:"),
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(10, 2))
+        cb_yon = ctk.CTkComboBox(form, values=[self._t(v) for v in [
+            "Kadastr agentligi hududiy boshqarmasi xodimlarining xatti-harakatlari",
+            "Davlat kadastrlari palatasi hududiy boshqarmasi xodimlarining xatti-harakatlari"
+        ]], width=500, font=ctk.CTkFont(size=12))
+        cb_yon.pack(anchor="w", padx=20)
+
+        ctk.CTkLabel(form, text=self._t("Murojaatning qisqacha mazmuni:"),
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(10, 2))
+        tb_matn = ctk.CTkTextbox(form, height=140, wrap="word", font=ctk.CTkFont(size=12))
+        tb_matn.pack(fill="x", padx=20, pady=(0, 15))
+
+        def save_phone_entry():
+            fish_xom = e_fish.get().strip()
+            tel_val = e_tel.get().strip()
+            vil_xom = cb_vil.get()
+            tum_xom = e_tum.get().strip()
+            yon_xom = cb_yon.get()
+            matn_xom = tb_matn.get("1.0", "end-1c").strip()
+
+            if not fish_xom or not tel_val or not matn_xom:
+                messagebox.showwarning(self._t("To'ldirish shart"),
+                                       self._t("Iltimos, barcha maydonlarni to'liq kiriting!"))
+                return
+
+            fish_val = self._to_latin(fish_xom) if self.is_cyrillic else fish_xom
+            vil_val = self._to_latin(vil_xom) if self.is_cyrillic else vil_xom
+            tum_val = self._to_latin(tum_xom) if self.is_cyrillic else tum_xom
+            yon_val = self._to_latin(yon_xom) if self.is_cyrillic else yon_xom
+            matn_val = self._to_latin(matn_xom) if self.is_cyrillic else matn_xom
+
+            masul = ("Davlat kadastrlari palatasi hududiy komplayens xodimi"
+                     if "palata" in yon_val.lower()
+                     else "Kadastr agentligi hududiy komplayens xodimi")
+
+            try:
+                new_id = self.loader.db.insert_phone_murojaat(
+                    fish_val, tel_val, vil_val, tum_val, yon_val, matn_val, masul)
+                self.loader.refresh_data()
+                self._redraw_entire_ui()
+                messagebox.showinfo(self._t("Qabul qilindi"),
+                                    self._t(f"Murojaat muvaffaqiyatli ro'yxatga olindi!\n"
+                                            f"Tartib raqami: #{new_id}"))
+            except Exception as e:
+                messagebox.showerror(self._t("Xatolik"),
+                                     self._t(f"Saqlashda xato: {e}"))
+
+        ctk.CTkButton(main_box, text=self._t("💾 Murojaatni ro'yxatga olish"),
+                      height=38, width=250, fg_color="#1B5E20", hover_color="#2E7D32",
+                      font=ctk.CTkFont(size=13, weight="bold"),
+                      command=save_phone_entry).pack(pady=20)
+
+    def show_xodimlar_view(self):
+        self._push_current_to_stack()
+        self.current_view_func = self.show_xodimlar_view
+
+        self.btn_back.configure(state="normal")
+        self.lbl_path.configure(text=self._t("Asosiy oyna  /  Hududiy komplayens xodimlari"))
+        self._clear_container()
+
+        main_box = ctk.CTkFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
+                                border_width=1, border_color="#CBD5E1")
+        main_box.pack(fill="both", expand=True, padx=4, pady=4)
+
+        ctk.CTkLabel(main_box,
+                     text=self._t("👥 Hududiy komplayens xodimlari "
+                                  "(Tahrirlash uchun qator ustiga bosing):"),
+                     font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color="#0F2537").pack(anchor="w", padx=15, pady=10)
+
+        table_frame = ctk.CTkFrame(main_box, fg_color="transparent")
+        table_frame.pack(fill="both", expand=True, padx=15, pady=(0, 10))
+
+        cols = ("id", "viloyat", "tashkilot", "fish", "telefon", "telegram")
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Xod.Treeview", rowheight=30, font=("Calibri", 11),
+                        bordercolor="#94A3B8", borderwidth=1)
+        style.configure("Xod.Treeview.Heading", font=("Calibri", 11, "bold"),
+                        background=self.t_colors["primary"], foreground="#FFFFFF")
+
+        tree = ttk.Treeview(table_frame, columns=cols, show="headings",
+                            style="Xod.Treeview", selectmode="browse")
+        tree.heading("id", text="#")
+        tree.heading("viloyat", text=self._t("Hudud"))
+        tree.heading("tashkilot", text=self._t("Tashkilot"))
+        tree.heading("fish", text=self._t("F.I.Sh."))
+        tree.heading("telefon", text=self._t("Telefon raqami"))
+        tree.heading("telegram", text=self._t("Telegram Username"))
+
+        tree.column("id", width=40, anchor="center")
+        tree.column("viloyat", width=180)
+        tree.column("tashkilot", width=220)
+        tree.column("fish", width=200)
+        tree.column("telefon", width=140, anchor="center")
+        tree.column("telegram", width=180, anchor="center")
+
+        vsb = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=vsb.set)
+        tree.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+
+        def populate_x():
+            tree.delete(*tree.get_children())
+            try:
+                df_x = self.loader.db.get_xodimlar()
+            except Exception as e:
+                messagebox.showerror(self._t("Xatolik"),
+                                     self._t(f"Xodimlar ro'yxatini olishda xato: {e}"))
+                return
+
+            for _, r in df_x.iterrows():
+                def _s(key):
+                    v = r.get(key, '')
+                    return '' if _is_null(v) else str(v)
+                tree.insert("", "end", values=(
+                    _s('id'),
+                    self._t(_s('viloyat')),
+                    self._t(_s('tashkilot_turi')),
+                    self._t(_s('fish')),
+                    _s('telefon'),
+                    _s('telegram_username'),
+                ))
+
+        populate_x()
+
+        edit_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
+                                  border_width=1, border_color="#CBD5E1")
+        edit_frame.pack(fill="x", padx=15, pady=(0, 12))
+
+        ctk.CTkLabel(edit_frame, text=self._t("Tanlangan xodimni tahrirlash:"),
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     text_color="#0F2537").pack(anchor="w", padx=12, pady=(6, 4))
+
+        row_inputs = ctk.CTkFrame(edit_frame, fg_color="transparent")
+        row_inputs.pack(fill="x", padx=12, pady=4)
+
+        ctk.CTkLabel(row_inputs, text=self._t("F.I.Sh:")).pack(side="left", padx=4)
+        e_fish = ctk.CTkEntry(row_inputs, width=200)
+        e_fish.pack(side="left", padx=4)
+
+        ctk.CTkLabel(row_inputs, text=self._t("Telefon:")).pack(side="left", padx=4)
+        e_tel = ctk.CTkEntry(row_inputs, width=140)
+        e_tel.pack(side="left", padx=4)
+
+        ctk.CTkLabel(row_inputs, text=self._t("Telegram:")).pack(side="left", padx=4)
+        e_tg = ctk.CTkEntry(row_inputs, width=160)
+        e_tg.pack(side="left", padx=4)
+
+        selected_id = [None]
+
+        def on_select(_event):
+            sel = tree.selection()
+            if not sel:
+                return
+            vals = tree.item(sel[0], "values")
+            selected_id[0] = vals[0]
+            for entry, val in ((e_fish, vals[3]), (e_tel, vals[4]), (e_tg, vals[5])):
+                entry.delete(0, 'end')
+                entry.insert(0, val)
+
+        tree.bind("<<TreeviewSelect>>", on_select)
+
+        def save_x():
+            if not selected_id[0]:
+                messagebox.showwarning(self._t("Diqqat"),
+                                       self._t("Jadvaldan biror xodimni tanlang!"))
+                return
+            fish_v = self._to_latin(e_fish.get().strip()) if self.is_cyrillic else e_fish.get().strip()
+            try:
+                self.loader.db.save_xodim(selected_id[0], fish_v,
+                                          e_tel.get().strip(), e_tg.get().strip())
+                populate_x()
+                messagebox.showinfo(self._t("Saqlandi"),
+                                    self._t("Hududiy xodim ma'lumotlari muvaffaqiyatli saqlandi!"))
+            except Exception as e:
+                messagebox.showerror(self._t("Xatolik"),
+                                     self._t(f"Saqlashda xato: {e}"))
+
+        ctk.CTkButton(row_inputs, text=self._t("💾 Saqlash"), width=100, height=28,
+                      fg_color="#1B5E20", hover_color="#2E7D32",
+                      font=ctk.CTkFont(size=11, weight="bold"),
+                      command=save_x).pack(side="left", padx=10)
+
+    def show_settings_view(self):
+        self._push_current_to_stack()
+        self.current_view_func = self.show_settings_view
+
+        self.btn_back.configure(state="normal")
+        self.lbl_path.configure(text=self._t("Asosiy oyna  /  Tizim sozlamalari (Admin Panel)"))
+        self._clear_container()
+
+        sets = self.loader.db.get_settings()
+
+        main_box = ctk.CTkScrollableFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
+                                           border_width=1, border_color="#CBD5E1")
+        main_box.pack(fill="both", expand=True, padx=4, pady=4)
+
+        ctk.CTkLabel(main_box, text=self._t("⚙️ DASTUR SOZLAMALARI"),
+                     font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color="#0F2537").pack(pady=(20, 15))
+
+        form = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
+                            border_width=1, border_color="#CBD5E1")
+        form.pack(fill="x", padx=100, pady=10)
+
+        row_sla = ctk.CTkFrame(form, fg_color="transparent")
+        row_sla.pack(fill="x", padx=20, pady=(20, 10))
+        ctk.CTkLabel(row_sla, text=self._t("Ijro muddati (SLA kun):"),
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 10))
+        e_sla = ctk.CTkEntry(row_sla, width=80, font=ctk.CTkFont(size=12))
+        e_sla.insert(0, str(sets.get("sla_days", "2")))
+        e_sla.pack(side="left")
+        ctk.CTkLabel(row_sla, text=self._t("kun (Asosiy ijro xavf chegarasi)"),
+                     font=ctk.CTkFont(size=12)).pack(side="left", padx=5)
+
+        ctk.CTkLabel(form, text=self._t("Word Xulosa Ma'lumotnomasi Sarlavhasi (Shapka):"),
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(15, 2))
+        tb_header = ctk.CTkTextbox(form, height=60, font=ctk.CTkFont(size=12))
+        h_text = sets.get("report_header",
+                          "O‘ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI\n"
+                          "KORRUPSIYAGA QARSHI KURASHISH BO‘LIMI")
+        tb_header.insert("1.0", self._t(h_text) if self.is_cyrillic else h_text)
+        tb_header.pack(fill="x", padx=20)
+
+        ctk.CTkLabel(form, text=self._t("Telegramga xabar yuborish shabloni:"),
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(15, 2))
+        tb_tg = ctk.CTkTextbox(form, height=180, font=ctk.CTkFont(size=12))
+        t_text = sets.get("tg_template", "Murojaat № {id}\nSana: {sana}\nMatn: {matn}")
+        tb_tg.insert("1.0", self._t(t_text) if self.is_cyrillic else t_text)
+        tb_tg.pack(fill="x", padx=20)
+
+        def save_settings():
+            try:
+                sla_val = e_sla.get().strip()
+                int(sla_val)
+            except ValueError:
+                messagebox.showerror(self._t("Xatolik"),
+                                     self._t("SLA kun butun son bo'lishi kerak!"))
+                return
+
+            new_sets = {
+                "sla_days": sla_val,
+                "report_header": (self._to_latin(tb_header.get("1.0", "end-1c").strip())
+                                  if self.is_cyrillic else tb_header.get("1.0", "end-1c").strip()),
+                "tg_template": (self._to_latin(tb_tg.get("1.0", "end-1c").strip())
+                                if self.is_cyrillic else tb_tg.get("1.0", "end-1c").strip()),
+            }
+            try:
+                self.loader.db.update_settings(new_sets)
+                messagebox.showinfo(self._t("Saqlandi"),
+                                    self._t("Sozlamalar muvaffaqiyatli saqlandi! "
+                                            "O'zgarishlar darhol kuchga kirdi."))
+            except Exception as e:
+                messagebox.showerror(self._t("Xatolik"),
+                                     self._t(f"Sozlamalarni saqlashda xato: {e}"))
+
+        ctk.CTkButton(form, text=self._t("💾 Sozlamalarni saqlash"),
+                      height=32, width=200, fg_color="#1B5E20", hover_color="#2E7D32",
+                      font=ctk.CTkFont(size=12, weight="bold"),
+                      command=save_settings).pack(pady=15)
+
+        ctk.CTkLabel(main_box,
+                     text=self._t("👥 FOYDALANUVCHILAR VA ROLLARI (LOGIN / PAROL)"),
+                     font=ctk.CTkFont(size=14, weight="bold"),
+                     text_color="#0F2537").pack(pady=(30, 10))
+
+        u_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
+                               border_width=1, border_color="#CBD5E1")
+        u_frame.pack(fill="x", padx=100, pady=10)
+
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Users.Treeview", rowheight=28, font=("Calibri", 11))
+        style.configure("Users.Treeview.Heading", font=("Calibri", 11, "bold"),
+                        background=self.t_colors["primary"], foreground="#FFFFFF")
+
+        tree_u = ttk.Treeview(u_frame, columns=("id", "user", "pass", "role"),
+                              show="headings", height=6, style="Users.Treeview")
+        tree_u.heading("id", text="ID")
+        tree_u.heading("user", text=self._t("Login"))
+        tree_u.heading("pass", text=self._t("Parol"))
+        tree_u.heading("role", text=self._t("Foydalanuvchi Roli"))
+
+        tree_u.column("id", width=50, anchor="center")
+        tree_u.column("user", width=200)
+        tree_u.column("pass", width=200)
+        tree_u.column("role", width=150, anchor="center")
+        tree_u.pack(fill="x", padx=15, pady=(15, 10))
+
+        user_passwords = {}
+
+        def populate_users():
+            tree_u.delete(*tree_u.get_children())
+            user_passwords.clear()
+            try:
+                df_u = self.loader.db.get_all_users()
+            except Exception as e:
+                messagebox.showerror(self._t("Xatolik"),
+                                     self._t(f"Foydalanuvchilarni olishda xato: {e}"))
+                return
+            for _, r in df_u.iterrows():
+                uid = r['id']
+                user_passwords[uid] = r['password']
+                tree_u.insert("", "end", values=(
+                    uid, r['username'], "•" * 8, self._t(r['role'].upper())))
+
+        populate_users()
+
+        u_input = ctk.CTkFrame(u_frame, fg_color="transparent")
+        u_input.pack(fill="x", padx=15, pady=10)
+
+        ctk.CTkLabel(u_input, text=self._t("Login:")).pack(side="left", padx=5)
+        e_u = ctk.CTkEntry(u_input, width=150)
+        e_u.pack(side="left", padx=5)
+
+        ctk.CTkLabel(u_input, text=self._t("Parol:")).pack(side="left", padx=5)
+        e_p = ctk.CTkEntry(u_input, width=150, show="•")
+        e_p.pack(side="left", padx=5)
+
+        ctk.CTkLabel(u_input, text=self._t("Rol:")).pack(side="left", padx=5)
+        cb_r = ctk.CTkComboBox(u_input, values=["admin", "kuzatuvchi"], width=120)
+        cb_r.set("kuzatuvchi")
+        cb_r.pack(side="left", padx=5)
+
+        sel_uid = [None]
+
+        def on_u_select(_event):
+            s = tree_u.selection()
+            if not s:
+                return
+            v = tree_u.item(s[0], "values")
+            sel_uid[0] = v[0]
+            e_u.delete(0, 'end')
+            e_u.insert(0, v[1])
+            e_p.delete(0, 'end')
+            role_val = self._to_latin(v[3]).lower()
+            cb_r.set(role_val if role_val in ["admin", "kuzatuvchi"] else "kuzatuvchi")
+
+        tree_u.bind("<<TreeviewSelect>>", on_u_select)
+
+        def add_u():
+            login = e_u.get().strip()
+            password = e_p.get().strip()
+            if not login or not password:
+                messagebox.showwarning(self._t("Xato"),
+                                       self._t("Login va parolni kiriting!"))
+                return
+            try:
+                ok = self.loader.db.add_user(login, password, cb_r.get())
+                if ok:
+                    populate_users()
+                    messagebox.showinfo(self._t("Saqlandi"),
+                                        self._t("Yangi foydalanuvchi tizimga qo'shildi."))
+                else:
+                    messagebox.showerror(self._t("Xato"),
+                                         self._t("Bu login band! Boshqa login kiriting."))
+            except Exception as e:
+                messagebox.showerror(self._t("Xatolik"),
+                                     self._t(f"Foydalanuvchi qo'shishda xato: {e}"))
+
+        def upd_u():
+            if not sel_uid[0]:
+                messagebox.showwarning(self._t("Xato"),
+                                       self._t("Ro'yxatdan foydalanuvchini tanlang!"))
+                return
+            new_pass = e_p.get().strip()
+            if not new_pass:
+                new_pass = user_passwords.get(sel_uid[0], "")
+            try:
+                self.loader.db.update_user(sel_uid[0], e_u.get().strip(), new_pass, cb_r.get())
+                populate_users()
+                messagebox.showinfo(self._t("Saqlandi"), self._t("Ma'lumot yangilandi."))
+            except Exception as e:
+                messagebox.showerror(self._t("Xatolik"),
+                                     self._t(f"Yangilashda xato: {e}"))
+
+        def del_u():
+            if not sel_uid[0]:
+                messagebox.showwarning(self._t("Xato"), self._t("Ro'yxatdan tanlang!"))
+                return
+            if str(sel_uid[0]) == "1":
+                messagebox.showerror(self._t("Xato"),
+                                     self._t("Asosiy adminni o'chirib bo'lmaydi!"))
+                return
+            if not messagebox.askyesno(self._t("Tasdiqlash"),
+                                       self._t("Rostdan ham ushbu foydalanuvchini o'chirmoqchimisiz?")):
+                return
+            try:
+                self.loader.db.delete_user(sel_uid[0])
+                populate_users()
+                messagebox.showinfo(self._t("O'chirildi"),
+                                    self._t("Foydalanuvchi o'chirildi."))
+            except Exception as e:
+                messagebox.showerror(self._t("Xatolik"),
+                                     self._t(f"O'chirishda xato: {e}"))
+
+        btn_row = ctk.CTkFrame(u_frame, fg_color="transparent")
+        btn_row.pack(pady=10)
+
+        ctk.CTkButton(btn_row, text=self._t("➕ Yangi qo'shish"), width=120,
+                      fg_color=self.t_colors["btn"], hover_color=self.t_colors["hover"],
+                      command=add_u).pack(side="left", padx=5)
+        ctk.CTkButton(btn_row, text=self._t("💾 O'zgarishni saqlash"), width=130,
+                      fg_color="#27AE60", command=upd_u).pack(side="left", padx=5)
+        ctk.CTkButton(btn_row, text=self._t("🗑 O'chirish"), width=100,
+                      fg_color="#C0392B", hover_color="#A93226",
+                      command=del_u).pack(side="left", padx=5)
+
+    def show_audit_view(self):
+        win = ctk.CTkToplevel(self)
+        win.title(self._t("Tizimga kirishlar tarixi (Audit Log)"))
+        win.geometry("850x500")
+        win.grab_set()
+
+        ctk.CTkLabel(win,
+                     text=self._t("👥 Tizimga kim, qachon va qaysi kompyuterdan kirgani tarixi"),
+                     font=ctk.CTkFont(size=16, weight="bold"),
+                     text_color="#0F2537").pack(pady=15)
+
+        t_box = ctk.CTkFrame(win, fg_color="#FFFFFF", border_width=1, border_color="#CBD5E1")
+        t_box.pack(padx=15, pady=5, fill="both", expand=True)
+
+        cols = ("#", "user", "role", "time", "comp")
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Audit.Treeview", rowheight=26, font=("Calibri", 11))
+        style.configure("Audit.Treeview.Heading", font=("Calibri", 11, "bold"),
+                        background=self.t_colors["primary"], foreground="#FFFFFF")
+
+        tree = ttk.Treeview(t_box, columns=cols, show="headings", height=15,
+                            style="Audit.Treeview")
+        tree.heading("#", text="№")
+        tree.heading("user", text=self._t("Foydalanuvchi logini"))
+        tree.heading("role", text=self._t("Roli"))
+        tree.heading("time", text=self._t("Kirgan vaqti"))
+        tree.heading("comp", text=self._t("Kompyuter nomi"))
+
+        tree.column("#", width=50, anchor="center")
+        tree.column("user", width=150, anchor="center")
+        tree.column("role", width=140, anchor="center")
+        tree.column("time", width=180, anchor="center")
+        tree.column("comp", width=180, anchor="center")
+
+        vsb = ttk.Scrollbar(t_box, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=vsb.set)
+        tree.pack(side="left", fill="both", expand=True)
+        vsb.pack(side="right", fill="y")
+
+        try:
+            df_logs = self.loader.db.get_audit_logs()
+            for _, r in df_logs.iterrows():
+                r_str = (self._t("Kuzatuvchi (Rahbar)")
+                         if str(r.get('Rol', '')).lower() == 'kuzatuvchi'
+                         else self._t("Administrator"))
+                tree.insert("", "end", values=(
+                    r.get('#', ''), r.get('Foydalanuvchi', ''), r_str,
+                    r.get('Kirish vaqti', ''), self._t(r.get('Kompyuter', ''))))
+        except Exception as e:
+            messagebox.showerror(self._t("Xatolik"),
+                                 self._t(f"Audit logni olishda xato: {e}"))
+
+    def _import_excel(self):
+        fp = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
+        if not fp:
+            return
+        try:
+            self.loader.load_from_excel(fp)
+            self._redraw_entire_ui()
+            messagebox.showinfo(self._t("Baza yangilandi"),
+                                self._t("Yangi murojaatlar muvaffaqiyatli yuklandi!"))
+        except Exception as e:
+            messagebox.showerror(self._t("Xatolik"),
+                                 self._t(f"Yuklashda xato: {e}"))
+
+    def _export_excel(self):
+        manba = getattr(self, 'selected_manba', 'Barchasi')
+        if 'Telegram' in manba:
+            fname = "Telegram_bot_murojaatlar.xlsx"
+        elif 'Ishonch' in manba:
+            fname = "Ishonch_telefoni_murojaatlar.xlsx"
+        else:
+            fname = "Barcha_murojaatlar_Umumiy.xlsx"
+
+        fp = filedialog.asksaveasfilename(defaultextension=".xlsx", initialfile=fname)
+        if not fp:
+            return
+        try:
+            ReportGenerator.export_excel(self.loader.filtered_df, fp)
+            messagebox.showinfo(self._t("Tayyor"),
+                                self._t(f"{manba} ma'lumotlari saqlandi!"))
+            reveal_in_file_manager(fp)
+        except Exception as e:
+            messagebox.showerror(self._t("Xatolik"),
+                                 self._t(f"Excel saqlashda xato: {e}"))
+
+    def _export_word(self):
+        fp = filedialog.asksaveasfilename(defaultextension=".docx",
+                                          initialfile="Rahbariyatga_Malumotnoma.docx")
+        if not fp:
+            return
+        sets = self.loader.db.get_settings()
+        period_val = self._t(getattr(self, 'selected_period', 'Barchasi'))
+        try:
+            ReportGenerator.export_word_report(
+                self.loader.get_kpi_stats(),
+                self.loader.filtered_df['Viloyat'].value_counts(),
+                fp,
+                period_val,
+                self._t(sets.get("report_header",
+                                 "O‘ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI"))
+            )
+            messagebox.showinfo(self._t("Tayyor"),
+                                self._t("Rasmiy Word ma'lumotnomasi saqlandi!"))
+            reveal_in_file_manager(fp)
+        except Exception as e:
+            messagebox.showerror(self._t("Xatolik"),
+                                 self._t(f"Word saqlashda xato: {e}"))
