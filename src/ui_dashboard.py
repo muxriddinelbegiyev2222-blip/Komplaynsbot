@@ -12,6 +12,7 @@ from datetime import datetime
 import pandas as pd
 from PIL import Image, ImageDraw
 from src.report_generator import ReportGenerator
+from src.logger import log, log_error, log_info, log_warning
 
 THEMES = {
     "Navy (Asl)": {"primary": "#0F2537", "btn": "#1E3A56", "hover": "#2A4D73"},
@@ -182,21 +183,27 @@ class DashboardApp(ctk.CTk):
         return text
 
     def _show_loading(self, message="⏳ Yuklanmoqda..."):
+        try:
+            pending = self.loader.db.get_pending_count()
+            if pending > 0:
+                message += f"\n\n📡 Kutilmoqda: {pending} ta o'zgarish"
+        except Exception:
+            pass
         self._loading_window = ctk.CTkToplevel(self)
         self._loading_window.title("")
-        self._loading_window.geometry("300x100")
+        self._loading_window.geometry("350x130")
         self._loading_window.resizable(False, False)
         self._loading_window.transient(self)
         self._loading_window.grab_set()
 
         self._loading_window.update_idletasks()
-        x = self.winfo_x() + (self.winfo_width() - 300) // 2
-        y = self.winfo_y() + (self.winfo_height() - 100) // 2
+        x = self.winfo_x() + (self.winfo_width() - 350) // 2
+        y = self.winfo_y() + (self.winfo_height() - 130) // 2
         self._loading_window.geometry(f"+{x}+{y}")
 
         ctk.CTkLabel(self._loading_window, text=message,
-                     font=ctk.CTkFont(size=13, weight="bold")).pack(pady=20)
-        self._progress = ctk.CTkProgressBar(self._loading_window, width=250)
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(pady=15)
+        self._progress = ctk.CTkProgressBar(self._loading_window, width=280)
         self._progress.pack(pady=10)
         self._progress.configure(mode="indeterminate")
         self._progress.start()
@@ -219,6 +226,7 @@ class DashboardApp(ctk.CTk):
             if self.current_view_func:
                 self.current_view_func()
         except Exception as e:
+            log_error(e, "refresh_view")
             messagebox.showerror(self._t("Xatolik"), str(e))
 
     def _redraw_entire_ui(self, initial=False):
@@ -345,6 +353,7 @@ class DashboardApp(ctk.CTk):
             self._redraw_entire_ui()
             messagebox.showinfo(self._t("Yangilandi"), self._t("Murojaatlar bulutdan olindi!"))
         except Exception as e:
+            log_error(e, "pull_from_cloud")
             self._hide_loading()
             messagebox.showerror(self._t("Xatolik"), self._t(f"Bulutdan olishda xato: {e}"))
 
@@ -369,7 +378,6 @@ class DashboardApp(ctk.CTk):
         if self.current_view_func is not None:
             self.view_stack.append(self.current_view_func)
 
-    # ================= 1: DASHBOARD =================
     def show_dashboard_view(self):
         self.current_view_func = self.show_dashboard_view
         self.view_stack.clear()
@@ -423,6 +431,21 @@ class DashboardApp(ctk.CTk):
         ctk.CTkButton(filter_box, text=self._t("Tozalash"), width=60, height=28,
                       fg_color="#64748B", hover_color="#475569",
                       font=ctk.CTkFont(size=11), command=self._reset_filters).pack(side="left", padx=6, pady=7)
+
+        # Offline queue ko'rsatkichi
+        try:
+            pending = self.loader.db.get_pending_count()
+            if pending > 0:
+                pending_card = ctk.CTkFrame(self.container, fg_color="#FFF4E5",
+                                            corner_radius=6, border_width=1,
+                                            border_color="#F39C12")
+                pending_card.pack(fill="x", pady=(0, 8), padx=2)
+                ctk.CTkLabel(pending_card,
+                             text=self._t(f"📡 {pending} ta o'zgarish navbatda — internet qaytganda yuboriladi"),
+                             font=ctk.CTkFont(size=12, weight="bold"),
+                             text_color="#D35400").pack(anchor="w", padx=12, pady=8)
+        except Exception as e:
+            log_error(e, "pending indicator")
 
         cards_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         cards_frame.pack(fill="x", pady=(0, 8))
@@ -580,7 +603,6 @@ class DashboardApp(ctk.CTk):
         self.loader.filter_data("Barchasi", "Barchasi", "Barchasi", "")
         self.show_dashboard_view()
 
-    # ================= 2: RO'YXAT =================
     def show_records_view(self, title, data_df):
         self._push_current_to_stack()
         self.current_view_func = lambda t=title, d=data_df: self.show_records_view(t, d)
@@ -602,7 +624,6 @@ class DashboardApp(ctk.CTk):
                                     width=320, font=ctk.CTkFont(size=12))
         entry_search.pack(side="left", padx=5)
 
-        # Bulk actions panel (faqat admin)
         if self.role == "admin":
             ctk.CTkButton(top_bar, text=self._t("⚡ Bulk"), width=90, height=28,
                           fg_color="#8E44AD", hover_color="#7D3C98",
@@ -710,7 +731,6 @@ class DashboardApp(ctk.CTk):
         tree.bind("<Double-1>", on_double_click)
 
     def _bulk_actions_dialog(self, data_df):
-        """Bulk actions dialog."""
         win = ctk.CTkToplevel(self)
         win.title(self._t("Bulk amallar"))
         win.geometry("600x500")
@@ -725,7 +745,6 @@ class DashboardApp(ctk.CTk):
         tb_ids = ctk.CTkTextbox(win, height=120, font=ctk.CTkFont(size=12))
         tb_ids.pack(fill="x", padx=20, pady=5)
 
-        # Barcha ID larni oldindan to'ldirish (ko'rsatma sifatida)
         all_ids = "\n".join([str(x) for x in data_df['#'].head(10).tolist()])
         tb_ids.insert("1.0", all_ids)
 
@@ -788,8 +807,7 @@ class DashboardApp(ctk.CTk):
                                                          ozgartirgan_rol=self.role)
             self.loader.refresh_data()
             win.destroy()
-            messagebox.showinfo(self._t("Tayyor"),
-                                self._t(f"{updated} ta murojaat yangilandi!"))
+            messagebox.showinfo(self._t("Tayyor"), self._t(f"{updated} ta murojaat yangilandi!"))
             self.show_records_view(self._t("Barcha murojaatlar"), self.loader.filtered_df)
 
         ctk.CTkButton(win, text=self._t("⚡ Qo'llash"), width=200, height=38,
@@ -797,7 +815,6 @@ class DashboardApp(ctk.CTk):
                       font=ctk.CTkFont(size=13, weight="bold"),
                       command=apply_bulk).pack(pady=15)
 
-    # ================= 3: KARTOCHKA =================
     def show_detail_view(self, m_id, return_callback):
         self._push_current_to_stack()
         self.current_view_func = lambda: self.show_detail_view(m_id, return_callback)
@@ -902,6 +919,7 @@ class DashboardApp(ctk.CTk):
             try:
                 webbrowser.open(url)
             except webbrowser.Error as e:
+                log_error(e, "telegram")
                 messagebox.showerror(self._t("Xatolik"), str(e))
 
         ctk.CTkButton(row_masul, text=self._t("✈️ Telegram"),
@@ -939,7 +957,6 @@ class DashboardApp(ctk.CTk):
         tb_natija.insert("1.0", self._t(natija_text) if self.is_cyrillic else natija_text)
         tb_natija.pack(fill="x", padx=15, pady=(0, 6))
 
-        # Bir nechta fayl ro'yxati
         self.attached_file_path = str(rec.get('Biriktirilgan_Fayl', '') or '')
 
         ctk.CTkLabel(action_frame, text=self._t("📎 Biriktirilgan fayllar:"),
@@ -975,6 +992,7 @@ class DashboardApp(ctk.CTk):
                                       fg_color="#C0392B", hover_color="#A93226",
                                       command=lambda fid=r['id']: self._delete_file(fid, refresh_files)).pack(side="right", padx=2)
             except Exception as e:
+                log_error(e, "refresh_files")
                 ctk.CTkLabel(self.fayllar_container, text=f"⚠️ {e}",
                              font=ctk.CTkFont(size=11), text_color="#C0392B").pack(anchor="w")
 
@@ -987,7 +1005,6 @@ class DashboardApp(ctk.CTk):
                                    command=lambda: self._attach_multi_file(m_id, refresh_files))
         btn_attach.pack(pady=6)
 
-        # Tarix tugmasi
         ctk.CTkButton(fayllar_frame, text=self._t("📜 O'zgarishlar tarixi"),
                       width=180, height=28, fg_color="#8E44AD", hover_color="#7D3C98",
                       font=ctk.CTkFont(size=11, weight="bold"),
@@ -1021,6 +1038,7 @@ class DashboardApp(ctk.CTk):
                 self.loader.refresh_data()
                 messagebox.showinfo(self._t("Saqlandi"), self._t(f"#{m_id} saqlandi!"))
             except Exception as e:
+                log_error(e, "save_changes")
                 messagebox.showerror(self._t("Xatolik"), str(e))
 
         def download_resolution():
@@ -1047,6 +1065,7 @@ class DashboardApp(ctk.CTk):
                 messagebox.showinfo(self._t("Tayyor"), self._t("Word saqlandi!"))
                 reveal_in_file_manager(fp)
             except Exception as e:
+                log_error(e, "word xulosa")
                 self._hide_loading()
                 messagebox.showerror(self._t("Xatolik"), str(e))
 
@@ -1090,7 +1109,6 @@ class DashboardApp(ctk.CTk):
                                      self._t("Papkaga yozish huquqi yo'q!"))
                 return
 
-            # Noyob nom
             base_name = os.path.basename(fp)
             dest = os.path.join(attach_dir, base_name)
             counter = 1
@@ -1106,6 +1124,7 @@ class DashboardApp(ctk.CTk):
                 refresh_callback()
             messagebox.showinfo(self._t("Tayyor"), self._t("Fayl qo'shildi!"))
         except Exception as e:
+            log_error(e, "attach_multi")
             messagebox.showerror(self._t("Xatolik"), str(e))
 
     def _open_file(self, filepath):
@@ -1118,6 +1137,7 @@ class DashboardApp(ctk.CTk):
                 else:
                     subprocess.Popen(["xdg-open", filepath])
             except (OSError, AttributeError) as e:
+                log_error(e, "open_file")
                 messagebox.showerror(self._t("Xatolik"), str(e))
         else:
             messagebox.showwarning(self._t("Fayl yo'q"), self._t("Fayl topilmadi!"))
@@ -1178,9 +1198,9 @@ class DashboardApp(ctk.CTk):
                     self._t(r.get('Yangi holat', '')),
                     self._t(r.get('Yangi chora', ''))))
         except Exception as e:
+            log_error(e, "history dialog")
             messagebox.showerror(self._t("Xatolik"), str(e))
 
-    # ================= 4: TELEFON QABUL =================
     def show_add_phone_view(self):
         self._push_current_to_stack()
         self.current_view_func = self.show_add_phone_view
@@ -1273,6 +1293,7 @@ class DashboardApp(ctk.CTk):
                 messagebox.showinfo(self._t("Qabul qilindi"),
                                     self._t(f"#{new_id} ro'yxatga olindi!"))
             except Exception as e:
+                log_error(e, "phone entry")
                 messagebox.showerror(self._t("Xatolik"), str(e))
 
         ctk.CTkButton(main_box, text=self._t("💾 Ro'yxatga olish"),
@@ -1280,7 +1301,6 @@ class DashboardApp(ctk.CTk):
                       font=ctk.CTkFont(size=13, weight="bold"),
                       command=save_phone_entry).pack(pady=20)
 
-    # ================= 5: XODIMLAR =================
     def show_xodimlar_view(self):
         self._push_current_to_stack()
         self.current_view_func = self.show_xodimlar_view
@@ -1340,6 +1360,7 @@ class DashboardApp(ctk.CTk):
             try:
                 df_x = self.loader.db.get_xodimlar()
             except Exception as e:
+                log_error(e, "populate_xodimlar")
                 messagebox.showerror(self._t("Xatolik"), str(e))
                 return
             for _, r in df_x.iterrows():
@@ -1400,6 +1421,7 @@ class DashboardApp(ctk.CTk):
                 populate_x()
                 messagebox.showinfo(self._t("Saqlandi"), self._t("Saqlandi!"))
             except Exception as e:
+                log_error(e, "save_xodim")
                 messagebox.showerror(self._t("Xatolik"), str(e))
 
         def delete_x():
@@ -1490,7 +1512,6 @@ class DashboardApp(ctk.CTk):
                       font=ctk.CTkFont(size=13, weight="bold"),
                       command=save_new).pack(pady=15)
 
-    # ================= 6: SOZLAMALAR =================
     def show_settings_view(self):
         self._push_current_to_stack()
         self.current_view_func = self.show_settings_view
@@ -1555,6 +1576,7 @@ class DashboardApp(ctk.CTk):
                 self.loader.db.update_settings(new_sets)
                 messagebox.showinfo(self._t("Saqlandi"), self._t("Saqlandi!"))
             except Exception as e:
+                log_error(e, "save_settings")
                 messagebox.showerror(self._t("Xatolik"), str(e))
 
         ctk.CTkButton(form, text=self._t("💾 Saqlash"), height=32, width=200,
@@ -1562,7 +1584,6 @@ class DashboardApp(ctk.CTk):
                       font=ctk.CTkFont(size=12, weight="bold"),
                       command=save_settings).pack(pady=15)
 
-        # Foydalanuvchilar
         ctk.CTkLabel(main_box, text=self._t("👥 FOYDALANUVCHILAR"),
                      font=ctk.CTkFont(size=14, weight="bold"),
                      text_color="#0F2537").pack(pady=(30, 10))
@@ -1598,6 +1619,7 @@ class DashboardApp(ctk.CTk):
             try:
                 df_u = self.loader.db.get_all_users()
             except Exception as e:
+                log_error(e, "populate_users")
                 messagebox.showerror(self._t("Xatolik"), str(e))
                 return
             for _, r in df_u.iterrows():
@@ -1654,6 +1676,7 @@ class DashboardApp(ctk.CTk):
                 else:
                     messagebox.showerror(self._t("Xato"), self._t("Login band!"))
             except Exception as e:
+                log_error(e, "add_user")
                 messagebox.showerror(self._t("Xatolik"), str(e))
 
         def upd_u():
@@ -1668,6 +1691,7 @@ class DashboardApp(ctk.CTk):
                 populate_users()
                 messagebox.showinfo(self._t("Saqlandi"), self._t("Yangilandi!"))
             except Exception as e:
+                log_error(e, "upd_user")
                 messagebox.showerror(self._t("Xatolik"), str(e))
 
         def del_u():
@@ -1695,7 +1719,6 @@ class DashboardApp(ctk.CTk):
                       fg_color="#C0392B", hover_color="#A93226",
                       command=del_u).pack(side="left", padx=5)
 
-    # ================= 7: CHARTS =================
     def show_charts_view(self):
         self._push_current_to_stack()
         self.current_view_func = self.show_charts_view
@@ -1737,7 +1760,6 @@ class DashboardApp(ctk.CTk):
                          font=ctk.CTkFont(size=13)).pack(pady=30)
             return
 
-        # 1. Viloyat bo'yicha bar chart
         chart1_frame = ctk.CTkFrame(charts_frame, fg_color="#F8FAFC", corner_radius=6,
                                     border_width=1, border_color="#CBD5E1")
         chart1_frame.pack(fill="both", expand=True, padx=5, pady=5)
@@ -1762,9 +1784,9 @@ class DashboardApp(ctk.CTk):
             canvas1.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=5)
             plt.close(fig1)
         except Exception as e:
+            log_error(e, "chart1")
             ctk.CTkLabel(chart1_frame, text=f"⚠️ {e}").pack()
 
-        # 2. Status bo'yicha pie chart
         chart2_frame = ctk.CTkFrame(charts_frame, fg_color="#F8FAFC", corner_radius=6,
                                     border_width=1, border_color="#CBD5E1")
         chart2_frame.pack(fill="both", expand=True, padx=5, pady=5)
@@ -1790,9 +1812,9 @@ class DashboardApp(ctk.CTk):
             canvas2.get_tk_widget().pack(fill="both", expand=True, padx=10, pady=5)
             plt.close(fig2)
         except Exception as e:
+            log_error(e, "chart2")
             ctk.CTkLabel(chart2_frame, text=f"⚠️ {e}").pack()
 
-        # 3. Kunlik trend
         chart3_frame = ctk.CTkFrame(charts_frame, fg_color="#F8FAFC", corner_radius=6,
                                     border_width=1, border_color="#CBD5E1")
         chart3_frame.pack(fill="both", expand=True, padx=5, pady=5)
@@ -1825,9 +1847,9 @@ class DashboardApp(ctk.CTk):
                 else:
                     ctk.CTkLabel(chart3_frame, text=self._t("Ma'lumot yo'q")).pack()
         except Exception as e:
+            log_error(e, "chart3")
             ctk.CTkLabel(chart3_frame, text=f"⚠️ {e}").pack()
 
-    # ================= 8: AUDIT =================
     def show_audit_view(self):
         win = ctk.CTkToplevel(self)
         win.title(self._t("Kirishlar tarixi"))
@@ -1876,9 +1898,9 @@ class DashboardApp(ctk.CTk):
                     r.get('#', ''), r.get('Foydalanuvchi', ''), r_str,
                     r.get('Kirish vaqti', ''), self._t(r.get('Kompyuter', ''))))
         except Exception as e:
+            log_error(e, "audit view")
             messagebox.showerror(self._t("Xatolik"), str(e))
 
-    # ================= EKSPORT =================
     def _import_excel(self):
         fp = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
         if not fp:
@@ -1890,6 +1912,7 @@ class DashboardApp(ctk.CTk):
             self._redraw_entire_ui()
             messagebox.showinfo(self._t("Baza yangilandi"), self._t("Yuklandi!"))
         except Exception as e:
+            log_error(e, "import_excel")
             self._hide_loading()
             messagebox.showerror(self._t("Xatolik"), str(e))
 
@@ -1912,6 +1935,7 @@ class DashboardApp(ctk.CTk):
             messagebox.showinfo(self._t("Tayyor"), self._t(f"{manba} saqlandi!"))
             reveal_in_file_manager(fp)
         except Exception as e:
+            log_error(e, "export_excel")
             self._hide_loading()
             messagebox.showerror(self._t("Xatolik"), str(e))
 
@@ -1934,5 +1958,6 @@ class DashboardApp(ctk.CTk):
             messagebox.showinfo(self._t("Tayyor"), self._t("Word saqlandi!"))
             reveal_in_file_manager(fp)
         except Exception as e:
+            log_error(e, "export_word")
             self._hide_loading()
             messagebox.showerror(self._t("Xatolik"), str(e))
