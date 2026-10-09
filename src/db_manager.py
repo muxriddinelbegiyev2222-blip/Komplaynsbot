@@ -691,4 +691,115 @@ class DatabaseManager:
                     LIMIT 1
                 """, (viloyat, org_filter))
                 row = cursor.fetchone()
-                if not
+                if not row:
+                    cursor.execute(
+                        "SELECT fish, telefon, telegram_username FROM xodimlar WHERE viloyat = ? LIMIT 1",
+                        (viloyat,))
+                    row = cursor.fetchone()
+                if row:
+                    return {
+                        'fish': row[0] or '',
+                        'telefon': row[1] or '',
+                        'username': row[2] or '',
+                    }
+        except Exception:
+            pass
+        return {}
+
+    def get_all_users(self):
+        with self._get_connection() as conn:
+            return pd.read_sql_query(
+                "SELECT id, username, password, role FROM users", conn)
+
+    def add_user(self, username, password, role):
+        try:
+            # Parolni hash qilish
+            hashed = self.hash_password(password)
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                    (username, hashed, role))
+                user_id = cursor.lastrowid
+                conn.commit()
+            if self.users_sheet:
+                threading.Thread(
+                    target=lambda: self.users_sheet.append_row(
+                        [str(user_id), str(username), str(hashed), str(role), 1]),
+                    daemon=True).start()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+    def update_user(self, user_id, username, password, role):
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                if not str(password).strip():
+                    # Parol bo'sh - eskisini saqlab qolamiz
+                    cursor.execute("SELECT password FROM users WHERE id = ?", (user_id,))
+                    r = cursor.fetchone()
+                    if r:
+                        password = r[0]
+                else:
+                    # Yangi parolni hash qilish
+                    if not self.is_hashed(password):
+                        password = self.hash_password(password)
+                
+                cursor.execute(
+                    "UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?",
+                    (username, password, role, user_id))
+                conn.commit()
+        except sqlite3.IntegrityError:
+            return False
+        except Exception:
+            return False
+
+        if self.users_sheet:
+            def _upd_cloud():
+                try:
+                    cell = self.users_sheet.find(str(user_id), in_column=1)
+                    vals = [str(user_id), str(username), str(password), str(role), 1]
+                    if cell:
+                        self.users_sheet.update(f"A{cell.row}:E{cell.row}", [vals])
+                    else:
+                        self.users_sheet.append_row(vals)
+                except Exception:
+                    pass
+            threading.Thread(target=_upd_cloud, daemon=True).start()
+        return True
+
+    def delete_user(self, user_id):
+        if str(user_id) == "1":
+            return False
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            conn.commit()
+        if self.users_sheet:
+            def del_cloud():
+                try:
+                    cell = self.users_sheet.find(str(user_id), in_column=1)
+                    if cell:
+                        self.users_sheet.update(
+                            f"A{cell.row}:E{cell.row}",
+                            [[str(user_id), "DELETED", "", "", 0]])
+                except Exception:
+                    pass
+            threading.Thread(target=del_cloud, daemon=True).start()
+        return True
+
+    def get_audit_logs(self):
+        with self._get_connection() as conn:
+            return pd.read_sql_query(
+                "SELECT id as '#', username as 'Foydalanuvchi', role as 'Rol', kirish_vaqti as 'Kirish vaqti', kompyuter as 'Kompyuter' FROM audit_logs ORDER BY id DESC LIMIT 200",
+                conn)
+
+    def sync_pull_from_cloud(self):
+        if self.client is None:
+            raise RuntimeError("Google Sheets ulanmagan")
+        self._sync_users()
+        self._sync_murojaatlar()
+
+    def _sync_pull_from_cloud(self):
+        return self.sync_pull_from_cloud()
