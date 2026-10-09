@@ -30,12 +30,10 @@ except ImportError:
     HAS_GSHEETS = False
 
 
-# ================= RATE LIMITING =================
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_MINUTES = 5
 
 
-# ================= CREDENTIALS HIMOYASI =================
 def get_secure_credentials_path():
     if sys.platform == "win32":
         base = os.environ.get("APPDATA", os.path.expanduser("~"))
@@ -69,22 +67,12 @@ def migrate_credentials():
     return secure_path
 
 
-# ================= VILOYATLAR VA TASHKILOTLAR =================
 VILOYATLAR = [
-    "Toshkent shahri",
-    "Toshkent viloyati",
-    "Samarqand viloyati",
-    "Buxoro viloyati",
-    "Farg'ona viloyati",
-    "Andijon viloyati",
-    "Namangan viloyati",
-    "Qashqadaryo viloyati",
-    "Surxondaryo viloyati",
-    "Jizzax viloyati",
-    "Sirdaryo viloyati",
-    "Navoiy viloyati",
-    "Xorazm viloyati",
-    "Qoraqalpog'iston Respublikasi",
+    "Toshkent shahri", "Toshkent viloyati", "Samarqand viloyati",
+    "Buxoro viloyati", "Farg'ona viloyati", "Andijon viloyati",
+    "Namangan viloyati", "Qashqadaryo viloyati", "Surxondaryo viloyati",
+    "Jizzax viloyati", "Sirdaryo viloyati", "Navoiy viloyati",
+    "Xorazm viloyati", "Qoraqalpog'iston Respublikasi",
 ]
 
 TASHKILOTLAR = [
@@ -103,7 +91,7 @@ class DatabaseManager:
         self.sheet_name = "Murojaatlar_Bazasi"
 
         self._init_db()
-        self._seed_xodimlar()  # ← XODIMLARNI AVTOMATIK TO'LDIRISH
+        self._seed_xodimlar()
         self._auto_backup()
 
         self.client = self._connect_gsheets()
@@ -121,23 +109,16 @@ class DatabaseManager:
         self._sync_users()
         self._sync_murojaatlar()
 
-    # ================= XODIMLARNI AVTOMATIK TO'LDIRISH =================
+    # ================= XODIMLARNI TO'LDIRISH =================
     def _seed_xodimlar(self):
-        """
-        Agar xodimlar jadvali bo'sh bo'lsa, 14 ta viloyat × 2 ta tashkilot = 28 ta
-        yozuv qo'shadi. Har biriga F.I.Sh, telefon va telegram uchun bo'sh joy qoldiradi.
-        """
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT COUNT(*) FROM xodimlar")
                 count = cursor.fetchone()[0]
-                
                 if count > 0:
-                    print(f"ℹ️ Xodimlar jadvali allaqachon to'ldirilgan: {count} ta yozuv")
                     return
-                
-                print("📋 Xodimlar jadvali bo'sh — avtomatik to'ldirilmoqda...")
+                print("📋 Xodimlar jadvali to'ldirilmoqda...")
                 for vil in VILOYATLAR:
                     for tash in TASHKILOTLAR:
                         cursor.execute(
@@ -147,7 +128,7 @@ class DatabaseManager:
                             (vil, tash, "", "", "")
                         )
                 conn.commit()
-                print(f"✅ {len(VILOYATLAR) * len(TASHKILOTLAR)} ta xodim yozuvi qo'shildi")
+                print(f"✅ {len(VILOYATLAR) * len(TASHKILOTLAR)} ta xodim qo'shildi")
         except Exception as e:
             print(f"⚠️ Xodimlarni to'ldirishda xato: {e}")
 
@@ -226,6 +207,34 @@ class DatabaseManager:
                     username TEXT,
                     attempt_time TEXT,
                     success INTEGER DEFAULT 0
+                )
+            """)
+            # YANGI: Statuslar tarixi (audit)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS murojaat_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    murojaat_id INTEGER,
+                    old_status TEXT,
+                    new_status TEXT,
+                    old_chora TEXT,
+                    new_chora TEXT,
+                    old_masul TEXT,
+                    new_masul TEXT,
+                    natija TEXT,
+                    o'zgartirgan TEXT,
+                    o'zgartirgan_rol TEXT,
+                    o'zgartirilgan_vaqt TEXT
+                )
+            """)
+            # YANGI: Bir nechta fayl
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS murojaat_fayllar (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    murojaat_id INTEGER,
+                    fayl_nomi TEXT,
+                    fayl_yoli TEXT,
+                    yuklangan_vaqt TEXT,
+                    yuklagan TEXT
                 )
             """)
             cursor.execute("CREATE TABLE IF NOT EXISTS sozlamalar (key TEXT PRIMARY KEY, val TEXT)")
@@ -399,7 +408,6 @@ class DatabaseManager:
                                 "UPDATE users SET password = ? WHERE username = ?",
                                 (new_hash, username))
                             conn.commit()
-                        print(f"✅ Eski parol hash qilindi: {username}")
                     except Exception:
                         pass
                     if self.users_sheet:
@@ -540,9 +548,22 @@ class DatabaseManager:
             cursor.execute("SELECT * FROM murojaatlar WHERE id = ?", (m_id,))
             return cursor.fetchone()
 
+    # ================= YANGILANGAN: STATUSLAR TARIXI BILAN =================
     def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi,
                              biriktirilgan_fayl='', masul_komplayens='',
-                             chora_turi='Chora ko‘rilmagan'):
+                             chora_turi='Chora ko‘rilmagan',
+                             o'zgartirgan='', o'zgartirgan_rol=''):
+        """Murojaat holatini yangilash + statuslar tarixini yozish."""
+        # Eski qiymatlarni olish
+        old_data = None
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT ijro_holati, chora_turi, masul_komplayens FROM murojaatlar WHERE id = ?",
+                (m_id,))
+            old_data = cursor.fetchone()
+
+        # Yangilash
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -550,11 +571,51 @@ class DatabaseManager:
                 (ijro_holati, organish_natijasi, biriktirilgan_fayl,
                  masul_komplayens, chora_turi, m_id))
             conn.commit()
+
+        # Tarix yozish (agar o'zgarish bo'lgan bo'lsa)
+        if old_data:
+            old_ijro, old_chora, old_masul = old_data
+            if (old_ijro != ijro_holati or old_chora != chora_turi
+                    or old_masul != masul_komplayens):
+                try:
+                    with self._get_connection() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT INTO murojaat_history 
+                            (murojaat_id, old_status, new_status, old_chora, new_chora,
+                             old_masul, new_masul, natija, o'zgartirgan, o'zgartirgan_rol, o'zgartirilgan_vaqt)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (m_id, old_ijro, ijro_holati, old_chora, chora_turi,
+                              old_masul, masul_komplayens, organish_natijasi,
+                              o'zgartirgan, o'zgartirgan_rol,
+                              datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                        conn.commit()
+                except Exception as e:
+                    print(f"⚠️ Tarix yozishda xato: {e}")
+
         row_data = self._get_row_by_id(m_id)
         if row_data and self.sheet:
             threading.Thread(
                 target=lambda: self._sync_single_row_to_cloud(row_data),
                 daemon=True).start()
+
+    def get_murojaat_history(self, m_id):
+        """Murojaat tarixini qaytaradi."""
+        with self._get_connection() as conn:
+            df = pd.read_sql_query("""
+                SELECT o'zgartirilgan_vaqt as 'Vaqt',
+                       o'zgartirgan as 'Kim',
+                       o'zgartirgan_rol as 'Rol',
+                       old_status as 'Eski holat',
+                       new_status as 'Yangi holat',
+                       old_chora as 'Eski chora',
+                       new_chora as 'Yangi chora',
+                       natija as 'Natija'
+                FROM murojaat_history
+                WHERE murojaat_id = ?
+                ORDER BY id DESC
+            """, conn, params=(m_id,))
+            return df
 
     def _sync_single_row_to_cloud(self, row_data):
         try:
@@ -588,52 +649,132 @@ class DatabaseManager:
                 daemon=True).start()
         return new_id
 
-    def sync_excel_data(self, df):
-        new_cloud_records = []
+    # ================= YANGI: KO'P FAYL BOSHQARUVI =================
+    def add_murojaat_fayl(self, m_id, fayl_nomi, fayl_yoli, yuklagan=''):
+        """Murojaatga yangi fayl qo'shish."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO murojaat_fayllar 
+                    (murojaat_id, fayl_nomi, fayl_yoli, yuklangan_vaqt, yuklagan)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (m_id, fayl_nomi, fayl_yoli,
+                      datetime.now().strftime("%Y-%m-%d %H:%M:%S"), yuklagan))
+                conn.commit()
+                return True
+        except Exception as e:
+            print(f"⚠️ Fayl qo'shishda xato: {e}")
+            return False
+
+    def get_murojaat_fayllar(self, m_id):
+        """Murojaatga biriktirilgan barcha fayllarni qaytaradi."""
         with self._get_connection() as conn:
-            cursor = conn.cursor()
-            for _, row in df.iterrows():
-                m_id = None
-                for col_name in ['#', '№', 'ID', 'id', 'Tartib raqam']:
-                    if col_name in row and pd.notna(row[col_name]):
-                        try:
-                            m_id = int(str(row[col_name]).strip())
-                            break
-                        except (ValueError, TypeError):
-                            pass
-                if not m_id or m_id <= 9:
-                    continue
-                cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
-                if not cursor.fetchone():
-                    yonalish = str(row.get('Yoʻnalish', row.get('Yonalish', '')))
-                    default_masul = ("Davlat kadastrlari palatasi hududiy komplayens xodimi"
-                                     if 'palata' in yonalish.lower()
-                                     else "Kadastr agentligi hududiy komplayens xodimi")
-                    sana = str(row.get('Yaratilgan sana',
-                                       row.get('Yaratilgan_sana', row.get('Sana', ''))))
-                    fish = str(row.get('F.I.Sh.', row.get('FISH', row.get('F.I.SH', ''))))
-                    telefon = str(row.get('Telefon', row.get('Tel', '')))
-                    viloyat = str(row.get('Viloyat', ''))
-                    tuman = str(row.get('Tuman', ''))
-                    aniq_yonalish = str(row.get('Aniq_Yonalish', row.get('Aniq yonalish', '')))
-                    holat = str(row.get('Holat', ''))
-                    matn = str(row.get('Murojaat matni',
-                                       row.get('Murojaat_matni', row.get('Matn', ''))))
+            df = pd.read_sql_query("""
+                SELECT id, fayl_nomi, fayl_yoli, yuklangan_vaqt as 'Yuklangan', yuklagan as 'Kim'
+                FROM murojaat_fayllar
+                WHERE murojaat_id = ?
+                ORDER BY id DESC
+            """, conn, params=(m_id,))
+            return df
 
-                    cursor.execute("""INSERT INTO murojaatlar (id, yaratilgan_sana, fish, telefon, viloyat, tuman, yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan, javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi, manba) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', '', 'O‘rganishga yuborilgan', '', '', ?, 'Chora ko‘rilmagan', 'Telegram bot')""",
-                                   (m_id, sana, fish, telefon, viloyat, tuman,
-                                    yonalish, aniq_yonalish, holat, matn, default_masul))
-                    row_data = self._get_row_by_id(m_id)
-                    if row_data:
-                        new_cloud_records.append(row_data)
-            conn.commit()
+    def delete_murojaat_fayl(self, fayl_id):
+        """Faylni bazadan va diskdan o'chirish."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT fayl_yoli FROM murojaat_fayllar WHERE id = ?", (fayl_id,))
+                row = cursor.fetchone()
+                if row:
+                    fayl_yoli = row[0]
+                    # Diskdan o'chirish
+                    try:
+                        if fayl_yoli and os.path.exists(fayl_yoli):
+                            os.remove(fayl_yoli)
+                    except OSError:
+                        pass
+                    # Bazadan o'chirish
+                    cursor.execute("DELETE FROM murojaat_fayllar WHERE id = ?", (fayl_id,))
+                    conn.commit()
+                    return True
+        except Exception:
+            pass
+        return False
 
-        if new_cloud_records and self.sheet:
-            threading.Thread(
-                target=lambda: self.sheet.append_rows(
-                    [[str(x) if x is not None else "" for x in r] for r in new_cloud_records]),
-                daemon=True).start()
+    # ================= YANGI: BULK ACTIONS =================
+    def bulk_update_status(self, m_id_list, new_status, new_chora, new_masul,
+                           o'zgartirgan='', o'zgartirgan_rol=''):
+        """Ko'p murojaatni bir vaqtda yangilash."""
+        updated = 0
+        for m_id in m_id_list:
+            try:
+                # Eski qiymatlar
+                with self._get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "SELECT ijro_holati, chora_turi, masul_komplayens FROM murojaatlar WHERE id = ?",
+                        (m_id,))
+                    old = cursor.fetchone()
+                    if not old:
+                        continue
 
+                    cursor.execute("""
+                        UPDATE murojaatlar 
+                        SET ijro_holati = ?, chora_turi = ?, masul_komplayens = ?
+                        WHERE id = ?
+                    """, (new_status, new_chora, new_masul, m_id))
+
+                    # Tarix yozish
+                    cursor.execute("""
+                        INSERT INTO murojaat_history 
+                        (murojaat_id, old_status, new_status, old_chora, new_chora,
+                         old_masul, new_masul, natija, o'zgartirgan, o'zgartirgan_rol, o'zgartirilgan_vaqt)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (m_id, old[0], new_status, old[1], new_chora,
+                          old[2], new_masul, "(Bulk yangilash)",
+                          o'zgartirgan, o'zgartirgan_rol,
+                          datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                    conn.commit()
+                updated += 1
+            except Exception as e:
+                print(f"⚠️ Bulk yangilash xato #{m_id}: {e}")
+        return updated
+
+    # ================= YANGI: TREND TAHLILI =================
+    def get_trend_stats(self, days=30):
+        """O'tgan davrga nisbatan trend statistikasi."""
+        try:
+            with self._get_connection() as conn:
+                df = pd.read_sql_query(
+                    "SELECT yaratilgan_sana, ijro_holati FROM murojaatlar WHERE id > 9",
+                    conn)
+            if df.empty:
+                return {"current": 0, "previous": 0, "change_pct": 0, "change_abs": 0}
+
+            df['DT'] = pd.to_datetime(df['yaratilgan_sana'], errors='coerce')
+            df = df.dropna(subset=['DT'])
+
+            now = datetime.now()
+            current_start = now - timedelta(days=days)
+            previous_start = current_start - timedelta(days=days)
+
+            current = len(df[df['DT'] >= current_start])
+            previous = len(df[(df['DT'] >= previous_start) & (df['DT'] < current_start)])
+
+            change_abs = current - previous
+            change_pct = (change_abs / previous * 100) if previous > 0 else 0
+
+            return {
+                "current": current,
+                "previous": previous,
+                "change_abs": change_abs,
+                "change_pct": round(change_pct, 1),
+            }
+        except Exception as e:
+            print(f"⚠️ Trend hisoblashda xato: {e}")
+            return {"current": 0, "previous": 0, "change_abs": 0, "change_pct": 0}
+
+    # ================= SOZLAMALAR =================
     def get_settings(self):
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -650,13 +791,11 @@ class DatabaseManager:
 
     # ================= XODIMLAR =================
     def get_xodimlar(self):
-        """Barcha xodimlar ro'yxatini qaytaradi (viloyat va tashkilot bo'yicha tartiblangan)."""
         with self._get_connection() as conn:
             return pd.read_sql_query(
                 "SELECT * FROM xodimlar ORDER BY viloyat ASC, tashkilot_turi ASC", conn)
 
     def save_xodim(self, x_id, fish, telefon, telegram_username):
-        """Mavjud xodim ma'lumotlarini yangilash."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -665,7 +804,6 @@ class DatabaseManager:
             conn.commit()
 
     def add_xodim(self, viloyat, tashkilot_turi, fish, telefon, telegram_username):
-        """Yangi xodim qo'shish."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -681,7 +819,6 @@ class DatabaseManager:
             return False
 
     def delete_xodim(self, x_id):
-        """Xodimni o'chirish."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -706,7 +843,8 @@ class DatabaseManager:
                 cursor.execute("""
                     SELECT fish, telefon, telegram_username FROM xodimlar
                     WHERE viloyat = ? AND LOWER(tashkilot_turi) LIKE ?
-                    LIMIT 1                """, (viloyat, org_filter))
+                    LIMIT 1
+                """, (viloyat, org_filter))
                 row = cursor.fetchone()
                 if not row:
                     cursor.execute(
