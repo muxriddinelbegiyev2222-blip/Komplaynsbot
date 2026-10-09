@@ -17,34 +17,26 @@ LOG_DIR = os.path.join(BASE_DIR, "data", "logs")
 
 
 def setup_logger(name="Komplaynsbot", level=logging.INFO):
-    """
-    Logger yaratadi. Faylga va konsolga yozadi.
-    Fayl rotatsiyasi: 5 MB dan oshsa, yangi fayl.
-    """
     os.makedirs(LOG_DIR, exist_ok=True)
 
     logger = logging.getLogger(name)
     logger.setLevel(level)
 
-    # Takroriy handler'larni oldini olish
     if logger.handlers:
         return logger
 
-    # Fayl handler (rotatsiya bilan)
     log_file = os.path.join(LOG_DIR, "app.log")
     file_handler = RotatingFileHandler(
         log_file,
-        maxBytes=5 * 1024 * 1024,  # 5 MB
+        maxBytes=5 * 1024 * 1024,
         backupCount=5,
         encoding="utf-8"
     )
     file_handler.setLevel(logging.DEBUG)
 
-    # Konsol handler (faqat Windows'da)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
 
-    # Format
     formatter = logging.Formatter(
         "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
@@ -58,29 +50,24 @@ def setup_logger(name="Komplaynsbot", level=logging.INFO):
     return logger
 
 
-# Global logger
 log = setup_logger()
 
 
 def log_error(error, context=""):
-    """Xatoni log qilish (traceback bilan)."""
     import traceback
     log.error(f"{context}: {type(error).__name__}: {error}")
     log.debug(traceback.format_exc())
 
 
 def log_info(message):
-    """Muhim voqeani log qilish."""
     log.info(message)
 
 
 def log_warning(message):
-    """Ogohlantirish."""
     log.warning(message)
 
 
 def cleanup_old_logs(days=30):
-    """30 kundan eski log fayllarni o'chirish."""
     try:
         if not os.path.exists(LOG_DIR):
             return 0
