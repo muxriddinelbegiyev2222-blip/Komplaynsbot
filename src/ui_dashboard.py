@@ -38,26 +38,6 @@ def _is_null(value):
         return False
 
 
-def enable_copy_paste(root):
-    """Universal nusxalash (Lotin/Krill)."""
-    def _generate(event_name):
-        def handler(e):
-            try:
-                e.widget.event_generate(event_name)
-                return "break"
-            except tk.TclError:
-                return None
-        return handler
-
-    shortcuts = {
-        "c": "<<Copy>>", "C": "<<Copy>>", "с": "<<Copy>>", "С": "<<Copy>>",
-        "v": "<<Paste>>", "V": "<<Paste>>", "м": "<<Paste>>", "М": "<<Paste>>",
-        "x": "<<Cut>>", "X": "<<Cut>>", "ч": "<<Cut>>", "Ч": "<<Cut>>",
-    }
-    for key, event_name in shortcuts.items():
-        root.bind_all(f"<Control-KeyPress-{key}>", _generate(event_name))
-
-
 def ensure_app_logo():
     os.makedirs("assets", exist_ok=True)
     logo_path = os.path.join("assets", "compliance_logo.png")
@@ -132,7 +112,6 @@ CYR_TO_LAT = [
     ("Ъ", "'"), ("ъ", "'"),
 ]
 
-# ================= VILOYATLAR =================
 VILOYATLAR = [
     "Toshkent shahri", "Toshkent viloyati", "Samarqand viloyati",
     "Buxoro viloyati", "Farg'ona viloyati", "Andijon viloyati",
@@ -175,8 +154,6 @@ class DashboardApp(ctk.CTk):
         except (OSError, tk.TclError):
             self._icon_photo = None
 
-        enable_copy_paste(self)
-
         # Klaviatura shortcutlari
         self.bind("<F5>", lambda e: self._refresh_current_view())
         self.bind("<Escape>", lambda e: self._go_back())
@@ -209,20 +186,18 @@ class DashboardApp(ctk.CTk):
 
     # ================= LOADING =================
     def _show_loading(self, message="⏳ Yuklanmoqda..."):
-        """Ekran markazida loading ko'rsatish."""
         self._loading_window = ctk.CTkToplevel(self)
         self._loading_window.title("")
         self._loading_window.geometry("300x100")
         self._loading_window.resizable(False, False)
         self._loading_window.transient(self)
         self._loading_window.grab_set()
-        
-        # Markazga joylashtirish
+
         self._loading_window.update_idletasks()
         x = self.winfo_x() + (self.winfo_width() - 300) // 2
         y = self.winfo_y() + (self.winfo_height() - 100) // 2
         self._loading_window.geometry(f"+{x}+{y}")
-        
+
         ctk.CTkLabel(self._loading_window, text=message,
                      font=ctk.CTkFont(size=13, weight="bold")).pack(pady=20)
         self._progress = ctk.CTkProgressBar(self._loading_window, width=250)
@@ -232,7 +207,6 @@ class DashboardApp(ctk.CTk):
         self.update()
 
     def _hide_loading(self):
-        """Loading oynasini yopish."""
         try:
             if hasattr(self, '_progress'):
                 self._progress.stop()
@@ -245,7 +219,6 @@ class DashboardApp(ctk.CTk):
             pass
 
     def _refresh_current_view(self):
-        """F5 — joriy sahifani yangilash."""
         try:
             if self.current_view_func:
                 self.current_view_func()
@@ -404,7 +377,6 @@ class DashboardApp(ctk.CTk):
         self.lbl_path.configure(text=self._t("Asosiy oyna  /  Tahliliy Dashboard"))
         self._clear_container()
 
-        # ===== FILTR PANELI =====
         filter_box = ctk.CTkFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
                                   border_width=1, border_color="#CBD5E1")
         filter_box.pack(fill="x", pady=(0, 8), padx=2)
@@ -463,7 +435,6 @@ class DashboardApp(ctk.CTk):
             font=ctk.CTkFont(size=11), command=self._reset_filters
         ).pack(side="left", padx=6, pady=7)
 
-        # ===== KPI KARTALAR =====
         cards_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         cards_frame.pack(fill="x", pady=(0, 8))
         stats = self.loader.get_kpi_stats()
@@ -508,7 +479,6 @@ class DashboardApp(ctk.CTk):
                           fg_color="transparent", border_width=1, border_color="#CBD5E1",
                           font=ctk.CTkFont(size=9), command=cmd).pack(pady=(0, 6))
 
-        # ===== VILOYATLAR JADVALI =====
         table_container = ctk.CTkFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
                                        border_width=1, border_color="#CBD5E1")
         table_container.pack(fill="both", expand=True, padx=2, pady=(0, 8))
@@ -587,7 +557,6 @@ class DashboardApp(ctk.CTk):
 
         self.dash_tree.bind("<Double-1>", on_region_double_click)
 
-        # ===== PASTKI PANEL =====
         bottom_frame = ctk.CTkFrame(self.container, fg_color="transparent")
         bottom_frame.pack(fill="x", pady=(0, 2))
 
@@ -694,7 +663,6 @@ class DashboardApp(ctk.CTk):
             bottom_frame.grid_columnconfigure(col_idx, weight=1)
 
     def _apply_filters(self, _=None):
-        """Filter o'zgarganda FAQAT jadval va kartalarni yangilaydi (butun UI emas)."""
         self.selected_period = self._to_latin(self.cb_period.get())
         self.selected_masul = self._to_latin(self.cb_masul.get())
         self.selected_manba = self._to_latin(self.cb_manba.get())
@@ -706,7 +674,6 @@ class DashboardApp(ctk.CTk):
             manba=self.selected_manba,
             search_query=search_q
         )
-        # Butun dashboard qayta quriladi (tez)
         self.show_dashboard_view()
 
     def _reset_filters(self):
@@ -1117,7 +1084,7 @@ class DashboardApp(ctk.CTk):
                         "*.pdf *.png *.jpg *.jpeg *.docx *.doc *.xlsx")])
         if not fp:
             return
-        
+
         try:
             attach_dir = os.path.join(os.getcwd(), "data", "attachments")
             try:
@@ -1131,8 +1098,7 @@ class DashboardApp(ctk.CTk):
                             "2. YOKI Administrator sifatida ishga tushiring\n"
                             "3. YOKI papkaga to'liq ruxsat bering"))
                 return
-            
-            # Yozish huquqini tekshirish
+
             try:
                 test_file = os.path.join(attach_dir, ".write_test")
                 with open(test_file, "w") as f:
@@ -1146,9 +1112,9 @@ class DashboardApp(ctk.CTk):
                             "• Dasturni Desktop'ga ko'chiring\n"
                             "• YOKI Administrator sifatida ishga tushiring"))
                 return
-            
+
             dest = os.path.join(attach_dir, os.path.basename(fp))
-            
+
             if os.path.abspath(fp) != os.path.abspath(dest):
                 try:
                     shutil.copy2(fp, dest)
@@ -1163,7 +1129,7 @@ class DashboardApp(ctk.CTk):
                         self._t("Xatolik"),
                         self._t(f"Faylni nusxalashda xato:\n{e}"))
                     return
-            
+
             self.attached_file_path = dest
             self.lbl_file_status.configure(
                 text=f"📁 {self._t('Biriktirilgan:')} {os.path.basename(dest)}",
@@ -1311,7 +1277,6 @@ class DashboardApp(ctk.CTk):
                                 border_width=1, border_color="#CBD5E1")
         main_box.pack(fill="both", expand=True, padx=4, pady=4)
 
-        # Sarlavha + yangi qo'shish tugmasi
         header = ctk.CTkFrame(main_box, fg_color="transparent")
         header.pack(fill="x", padx=15, pady=10)
         ctk.CTkLabel(header, text=self._t("👥 Hududiy komplayens xodimlari:"),
@@ -1378,7 +1343,6 @@ class DashboardApp(ctk.CTk):
 
         populate_x()
 
-        # Tahrirlash paneli
         edit_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
                                   border_width=1, border_color="#CBD5E1")
         edit_frame.pack(fill="x", padx=15, pady=(0, 12))
@@ -1460,7 +1424,6 @@ class DashboardApp(ctk.CTk):
                       command=delete_x).pack(side="left", padx=4)
 
     def _add_xodim_dialog(self):
-        """Yangi xodim qo'shish dialog oynasi."""
         win = ctk.CTkToplevel(self)
         win.title(self._t("Yangi xodim qo'shish"))
         win.geometry("550x450")
@@ -1613,7 +1576,6 @@ class DashboardApp(ctk.CTk):
                       font=ctk.CTkFont(size=12, weight="bold"),
                       command=save_settings).pack(pady=15)
 
-        # ================= FOYDALANUVCHILAR =================
         ctk.CTkLabel(main_box, text=self._t("👥 FOYDALANUVCHILAR"),
                      font=ctk.CTkFont(size=14, weight="bold"),
                      text_color="#0F2537").pack(pady=(30, 10))
