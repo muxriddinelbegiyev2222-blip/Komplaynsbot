@@ -9,7 +9,6 @@ from datetime import datetime
 import urllib3
 import requests
 
-# RAHBAR KOMPYUTERIDAN KIRA OLISHI VA GOOGLE'GA ULANISH UCHUN SSL TO'SIQNI OLISH
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 _orig_session_init = requests.Session.__init__
 def _no_ssl_session_init(self, *args, **kwargs):
@@ -64,7 +63,6 @@ class DatabaseManager:
         self._sync_users()
         self._sync_murojaatlar()
 
-    # ================= BAZA YARATISH =================
     def _get_connection(self):
         return sqlite3.connect(self.db_path)
 
@@ -116,7 +114,6 @@ class DatabaseManager:
                                ("rahbar", "1977", "kuzatuvchi"))
             conn.commit()
 
-    # ================= GOOGLE SHEETS =================
     def _connect_gsheets(self):
         if not HAS_GSHEETS or not os.path.exists(self.json_key_path):
             return None
@@ -146,7 +143,6 @@ class DatabaseManager:
         except Exception:
             return None
 
-    # ================= AUDIT / LOGIN =================
     def log_user_entry(self, username, role):
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         comp_name = os.environ.get('COMPUTERNAME', 'Noma\'lum')
@@ -202,7 +198,6 @@ class DatabaseManager:
             return found_role
         return None
 
-    # ================= SINXRONIZATSIYA =================
     def _sync_users(self):
         if self.users_sheet is None:
             return
@@ -289,7 +284,6 @@ class DatabaseManager:
         except Exception:
             pass
 
-    # ================= MUROJAATLAR CRUD =================
     def get_all_records(self):
         with self._get_connection() as conn:
             df = pd.read_sql_query(
@@ -410,7 +404,6 @@ class DatabaseManager:
                     [[str(x) if x is not None else "" for x in r] for r in new_cloud_records]),
                 daemon=True).start()
 
-    # ================= SOZLAMALAR =================
     def get_settings(self):
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -425,7 +418,6 @@ class DatabaseManager:
                     "INSERT OR REPLACE INTO sozlamalar (key, val) VALUES (?, ?)", (k, v))
             conn.commit()
 
-    # ================= XODIMLAR =================
     def get_xodimlar(self):
         with self._get_connection() as conn:
             return pd.read_sql_query(
@@ -439,12 +431,7 @@ class DatabaseManager:
                 (fish, telefon, telegram_username, x_id))
             conn.commit()
 
-    # ================= YANGI: XODIM QIDIRISH =================
     def find_xodim_for_region(self, viloyat, masul_turi=''):
-        """
-        Berilgan viloyat va mas'ul turi bo'yicha hududiy xodimni topadi.
-        Qaytaradi: {'fish': ..., 'telefon': ..., 'username': ...} yoki {}
-        """
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -477,7 +464,6 @@ class DatabaseManager:
             pass
         return {}
 
-    # ================= FOYDALANUVCHILAR =================
     def get_all_users(self):
         with self._get_connection() as conn:
             return pd.read_sql_query(
@@ -501,12 +487,7 @@ class DatabaseManager:
         except sqlite3.IntegrityError:
             return False
 
-    # ================= YANGI: USER UPDATE =================
     def update_user(self, user_id, username, password, role):
-        """
-        Foydalanuvchi ma'lumotlarini yangilash.
-        Parol bo'sh bo'lsa — eski parol saqlanadi.
-        """
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -558,21 +539,17 @@ class DatabaseManager:
             threading.Thread(target=del_cloud, daemon=True).start()
         return True
 
-    # ================= AUDIT LOG =================
     def get_audit_logs(self):
         with self._get_connection() as conn:
             return pd.read_sql_query(
                 "SELECT id as '#', username as 'Foydalanuvchi', role as 'Rol', kirish_vaqti as 'Kirish vaqti', kompyuter as 'Kompyuter' FROM audit_logs ORDER BY id DESC LIMIT 200",
                 conn)
 
-    # ================= YANGI: BULUTDAN YANGILASH =================
     def sync_pull_from_cloud(self):
-        """Bulutdan (Google Sheets) ma'lumotlarni yuklab, lokal bazaga yozish."""
         if self.client is None:
             raise RuntimeError("Google Sheets ulanmagan (credentials.json yo'q)")
         self._sync_users()
         self._sync_murojaatlar()
 
     def _sync_pull_from_cloud(self):
-        """Eski nom bilan moslik uchun (deprecated)."""
         return self.sync_pull_from_cloud()
