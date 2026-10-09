@@ -59,7 +59,7 @@ def migrate_credentials():
         if os.path.exists(old):
             try:
                 shutil.copy2(old, secure_path)
-                log_info(f"credentials.json xavfsiz joyga ko'chirildi")
+                log_info("credentials.json xavfsiz joyga ko'chirildi")
                 try:
                     os.remove(old)
                 except OSError:
@@ -81,6 +81,15 @@ VILOYATLAR = [
 TASHKILOTLAR = [
     "Kadastr agentligi hududiy boshqarmasi",
     "Davlat kadastrlari palatasi hududiy boshqarmasi",
+]
+
+KATEGORIYALAR = [
+    "Pora / Tamagirlik",
+    "Sudsiz harakat",
+    "Byurokratiya / Suduradi",
+    "Tanish-bilishchilik",
+    "Qonunga xilof harakat",
+    "Boshqa",
 ]
 
 
@@ -177,7 +186,7 @@ class DatabaseManager:
                                       f"murojaatlar_{datetime.now().strftime('%Y_%m_%d')}.db")
                 if not os.path.exists(b_path):
                     shutil.copy2(self.db_path, b_path)
-                    log_info(f"Backup yaratildi: {b_path}")
+                    log_info(f"Backup: {b_path}")
         except Exception as e:
             log_error(e, "auto_backup")
 
@@ -210,9 +219,23 @@ class DatabaseManager:
                     id INTEGER PRIMARY KEY, yaratilgan_sana TEXT, fish TEXT, telefon TEXT, viloyat TEXT, tuman TEXT,
                     yonalish TEXT, aniq_yonalish TEXT, holat TEXT, murojaat_matni TEXT, javob TEXT, javob_bergan TEXT,
                     javob_sanasi TEXT, ijro_holati TEXT, organish_natijasi TEXT DEFAULT '', biriktirilgan_fayl TEXT DEFAULT '',
-                    masul_komplayens TEXT DEFAULT '', chora_turi TEXT DEFAULT 'Chora ko‘rilmagan', manba TEXT DEFAULT 'Telegram bot'
+                    masul_komplayens TEXT DEFAULT '', chora_turi TEXT DEFAULT 'Chora ko‘rilmagan', manba TEXT DEFAULT 'Telegram bot',
+                    kategoriya TEXT DEFAULT '', yaratgan TEXT DEFAULT '', yangilangan_vaqt TEXT DEFAULT '',
+                    arxiv INTEGER DEFAULT 0
                 )
             """)
+            # Mavjud bazaga yangi ustunlar qo'shish (xavfsiz)
+            for col_sql in [
+                "ALTER TABLE murojaatlar ADD COLUMN kategoriya TEXT DEFAULT ''",
+                "ALTER TABLE murojaatlar ADD COLUMN yaratgan TEXT DEFAULT ''",
+                "ALTER TABLE murojaatlar ADD COLUMN yangilangan_vaqt TEXT DEFAULT ''",
+                "ALTER TABLE murojaatlar ADD COLUMN arxiv INTEGER DEFAULT 0",
+            ]:
+                try:
+                    cursor.execute(col_sql)
+                except sqlite3.OperationalError:
+                    pass
+
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS xodimlar (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, viloyat TEXT, tashkilot_turi TEXT, fish TEXT, telefon TEXT, telegram_username TEXT
@@ -231,45 +254,40 @@ class DatabaseManager:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS login_attempts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT,
-                    attempt_time TEXT,
-                    success INTEGER DEFAULT 0
+                    username TEXT, attempt_time TEXT, success INTEGER DEFAULT 0
                 )
             """)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS murojaat_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    murojaat_id INTEGER,
-                    old_status TEXT,
-                    new_status TEXT,
-                    old_chora TEXT,
-                    new_chora TEXT,
-                    old_masul TEXT,
-                    new_masul TEXT,
-                    natija TEXT,
-                    ozgartirgan TEXT,
-                    ozgartirgan_rol TEXT,
-                    ozgartirilgan_vaqt TEXT
+                    murojaat_id INTEGER, old_status TEXT, new_status TEXT,
+                    old_chora TEXT, new_chora TEXT, old_masul TEXT, new_masul TEXT,
+                    natija TEXT, ozgartirgan TEXT, ozgartirgan_rol TEXT, ozgartirilgan_vaqt TEXT
                 )
             """)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS murojaat_fayllar (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    murojaat_id INTEGER, fayl_nomi TEXT, fayl_yoli TEXT,
+                    yuklangan_vaqt TEXT, yuklagan TEXT
+                )
+            """)
+            # YANGI: Izohlar jadvali
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS murojaat_izohlar (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     murojaat_id INTEGER,
-                    fayl_nomi TEXT,
-                    fayl_yoli TEXT,
-                    yuklangan_vaqt TEXT,
-                    yuklagan TEXT
+                    izoh TEXT,
+                    yozgan TEXT,
+                    yozgan_rol TEXT,
+                    yozilgan_vaqt TEXT
                 )
             """)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS pending_sync (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    action_type TEXT,
-                    murojaat_id INTEGER,
-                    payload TEXT,
-                    created_at TEXT,
-                    retry_count INTEGER DEFAULT 0
+                    action_type TEXT, murojaat_id INTEGER,
+                    payload TEXT, created_at TEXT, retry_count INTEGER DEFAULT 0
                 )
             """)
             cursor.execute("CREATE TABLE IF NOT EXISTS sozlamalar (key TEXT PRIMARY KEY, val TEXT)")
@@ -287,7 +305,7 @@ class DatabaseManager:
 
     def _connect_gsheets(self):
         if not HAS_GSHEETS or not os.path.exists(self.json_key_path):
-            log_warning("Google Sheets ulanmagan (credentials yo'q)")
+            log_warning("Google Sheets ulanmagan")
             return None
         try:
             scope = ["https://www.googleapis.com/auth/spreadsheets",
@@ -327,7 +345,7 @@ class DatabaseManager:
                 """, (action_type, murojaat_id, json.dumps(payload) if payload else "",
                       datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                 conn.commit()
-                log_warning(f"Offline queue: {action_type} #{murojaat_id}")
+                log_warning(f"Offline: {action_type} #{murojaat_id}")
                 return True
         except Exception as e:
             log_error(e, "add_to_pending")
@@ -343,7 +361,7 @@ class DatabaseManager:
                 rows = cursor.fetchall()
                 if not rows:
                     return
-                log_info(f"Pending queue: {len(rows)} ta amal qayta ishlanmoqda...")
+                log_info(f"Pending: {len(rows)} ta amal")
                 processed = 0
                 for row in rows:
                     pid, action, m_id = row
@@ -356,12 +374,10 @@ class DatabaseManager:
                         processed += 1
                     except Exception as e:
                         log_error(e, f"pending #{pid}")
-                        cursor.execute(
-                            "UPDATE pending_sync SET retry_count = retry_count + 1 WHERE id = ?",
-                            (pid,))
+                        cursor.execute("UPDATE pending_sync SET retry_count = retry_count + 1 WHERE id = ?", (pid,))
                 conn.commit()
                 if processed:
-                    log_info(f"Pending queue: {processed} ta amal bajarildi")
+                    log_info(f"Pending: {processed} ta bajarildi")
         except Exception as e:
             log_error(e, "process_pending")
 
@@ -444,7 +460,7 @@ class DatabaseManager:
 
         blocked, remaining = self._check_rate_limit(username)
         if blocked:
-            log_warning(f"Login bloklangan: {username} ({remaining} daqiqa)")
+            log_warning(f"Bloklangan: {username} ({remaining} daqiqa)")
             return None
 
         found_role = None
@@ -501,9 +517,7 @@ class DatabaseManager:
                     try:
                         with self._get_connection() as conn:
                             cursor = conn.cursor()
-                            cursor.execute(
-                                "UPDATE users SET password = ? WHERE username = ?",
-                                (new_hash, username))
+                            cursor.execute("UPDATE users SET password = ? WHERE username = ?", (new_hash, username))
                             conn.commit()
                     except Exception as e:
                         log_error(e, "hash eski parol")
@@ -514,7 +528,7 @@ class DatabaseManager:
                                 if cell:
                                     self.users_sheet.update_cell(cell.row, 3, new_hash)
                             except Exception as e:
-                                log_error(e, "cloud pwd update")
+                                log_error(e, "cloud pwd")
                         threading.Thread(target=_update_cloud_pwd, daemon=True).start()
                     self._log_login_attempt(username, True)
                     self.log_user_entry(username, found_role)
@@ -551,16 +565,13 @@ class DatabaseManager:
                             log_error(e, "cloud user hash")
                     cursor.execute("SELECT id FROM users WHERE username = ?", (un,))
                     if not cursor.fetchone():
-                        cursor.execute(
-                            "INSERT INTO users (username, password, role, active) VALUES (?, ?, ?, ?)",
-                            (un, pw, rl, act))
+                        cursor.execute("INSERT INTO users (username, password, role, active) VALUES (?, ?, ?, ?)",
+                                       (un, pw, rl, act))
                     else:
-                        cursor.execute(
-                            "UPDATE users SET password = ?, role = ?, active = ? WHERE username = ?",
-                            (pw, rl, act, un))
+                        cursor.execute("UPDATE users SET password = ?, role = ?, active = ? WHERE username = ?",
+                                       (pw, rl, act, un))
                 conn.commit()
-                cursor.execute(
-                    "SELECT id, username, password, role, active FROM users WHERE active = 1")
+                cursor.execute("SELECT id, username, password, role, active FROM users WHERE active = 1")
                 new_cloud_rows = [[str(u[0]), str(u[1]), str(u[2]), str(u[3]), int(u[4])]
                                   for u in cursor.fetchall() if u[1] not in cloud_usernames]
                 if new_cloud_rows:
@@ -612,17 +623,16 @@ class DatabaseManager:
                                         m_id))
                 conn.commit()
                 cursor.execute("SELECT * FROM murojaatlar WHERE id > 9")
-                missing_in_cloud = [[str(x) if x is not None else "" for x in r]
-                                    for r in cursor.fetchall() if r[0] not in cloud_ids]
-                if missing_in_cloud:
-                    self.sheet.append_rows(missing_in_cloud)
+                missing = [[str(x) if x is not None else "" for x in r]
+                           for r in cursor.fetchall() if r[0] not in cloud_ids]
+                if missing:
+                    self.sheet.append_rows(missing)
         except Exception as e:
             log_error(e, "sync_murojaatlar")
 
     def get_all_records(self):
         with self._get_connection() as conn:
-            df = pd.read_sql_query(
-                "SELECT * FROM murojaatlar WHERE id > 9 ORDER BY id DESC", conn)
+            df = pd.read_sql_query("SELECT * FROM murojaatlar WHERE id > 9 ORDER BY id DESC", conn)
             df = df.rename(columns={
                 'id': '#', 'yaratilgan_sana': 'Yaratilgan sana', 'fish': 'F.I.Sh.',
                 'telefon': 'Telefon', 'viloyat': 'Viloyat', 'tuman': 'Tuman',
@@ -632,7 +642,9 @@ class DatabaseManager:
                 'ijro_holati': 'Ijro_Holati', 'organish_natijasi': 'Organish_Natijasi',
                 'biriktirilgan_fayl': 'Biriktirilgan_Fayl',
                 'masul_komplayens': 'Masul_Komplayens', 'chora_turi': 'Chora_Turi',
-                'manba': 'Manba'
+                'manba': 'Manba', 'kategoriya': 'Kategoriya',
+                'yaratgan': 'Yaratgan', 'yangilangan_vaqt': 'Yangilangan',
+                'arxiv': 'Arxiv'
             })
             if 'Manba' not in df.columns:
                 df['Manba'] = 'Telegram bot'
@@ -647,7 +659,7 @@ class DatabaseManager:
 
     def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi,
                              biriktirilgan_fayl='', masul_komplayens='',
-                             chora_turi='Chora ko‘rilmagan',
+                             chora_turi='Chora ko‘rilmagan', kategoriya='',
                              ozgartirgan='', ozgartirgan_rol=''):
         old_data = None
         with self._get_connection() as conn:
@@ -659,10 +671,15 @@ class DatabaseManager:
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE murojaatlar SET ijro_holati = ?, organish_natijasi = ?, biriktirilgan_fayl = ?, masul_komplayens = ?, chora_turi = ? WHERE id = ?",
-                (ijro_holati, organish_natijasi, biriktirilgan_fayl,
-                 masul_komplayens, chora_turi, m_id))
+            cursor.execute("""
+                UPDATE murojaatlar SET 
+                    ijro_holati = ?, organish_natijasi = ?, biriktirilgan_fayl = ?, 
+                    masul_komplayens = ?, chora_turi = ?, kategoriya = ?,
+                    yangilangan_vaqt = ?, yaratgan = ?
+                WHERE id = ?
+            """, (ijro_holati, organish_natijasi, biriktirilgan_fayl,
+                  masul_komplayens, chora_turi, kategoriya,
+                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ozgartirgan, m_id))
             conn.commit()
 
         if old_data:
@@ -683,7 +700,7 @@ class DatabaseManager:
                               datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                         conn.commit()
                 except Exception as e:
-                    log_error(e, "history yozish")
+                    log_error(e, "history")
 
         row_data = self._get_row_by_id(m_id)
         if row_data:
@@ -696,27 +713,80 @@ class DatabaseManager:
             else:
                 self._add_to_pending("update", m_id)
 
+    # ================= YANGI: IZOHLAR =================
+    def add_izoh(self, m_id, izoh, yozgan='', yozgan_rol=''):
+        """Murojaatga izoh qo'shish."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO murojaat_izohlar 
+                    (murojaat_id, izoh, yozgan, yozgan_rol, yozilgan_vaqt)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (m_id, izoh, yozgan, yozgan_rol,
+                      datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                conn.commit()
+                return True
+        except Exception as e:
+            log_error(e, "add_izoh")
+            return False
+
+    def get_murojaat_izohlar(self, m_id):
+        """Murojaat izohlarini qaytaradi."""
+        try:
+            with self._get_connection() as conn:
+                df = pd.read_sql_query("""
+                    SELECT id, izoh, yozgan as 'Kim', yozgan_rol as 'Rol',
+                           yozilgan_vaqt as 'Vaqt'
+                    FROM murojaat_izohlar
+                    WHERE murojaat_id = ?
+                    ORDER BY id DESC
+                """, conn, params=(m_id,))
+                return df
+        except Exception as e:
+            log_error(e, "get_izohlar")
+            return pd.DataFrame()
+
+    def delete_izoh(self, izoh_id):
+        """Izohni o'chirish (faqat admin)."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM murojaat_izohlar WHERE id = ?", (izoh_id,))
+                conn.commit()
+                return True
+        except Exception as e:
+            log_error(e, "delete_izoh")
+            return False
+
+    # ================= YANGI: ARXIV =================
+    def archive_murojaat(self, m_id, arxiv=1):
+        """Murojaatni arxivga qo'yish yoki qaytarish."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE murojaatlar SET arxiv = ? WHERE id = ?", (arxiv, m_id))
+                conn.commit()
+                return True
+        except Exception as e:
+            log_error(e, "archive")
+            return False
+
     def get_murojaat_history(self, m_id):
         with self._get_connection() as conn:
             df = pd.read_sql_query("""
-                SELECT ozgartirilgan_vaqt as 'Vaqt',
-                       ozgartirgan as 'Kim',
-                       ozgartirgan_rol as 'Rol',
-                       old_status as 'Eski holat',
-                       new_status as 'Yangi holat',
-                       old_chora as 'Eski chora',
-                       new_chora as 'Yangi chora',
-                       natija as 'Natija'
-                FROM murojaat_history
-                WHERE murojaat_id = ?
-                ORDER BY id DESC
+                SELECT ozgartirilgan_vaqt as 'Vaqt', ozgartirgan as 'Kim',
+                       ozgartirgan_rol as 'Rol', old_status as 'Eski holat',
+                       new_status as 'Yangi holat', old_chora as 'Eski chora',
+                       new_chora as 'Yangi chora', natija as 'Natija'
+                FROM murojaat_history WHERE murojaat_id = ? ORDER BY id DESC
             """, conn, params=(m_id,))
             return df
 
     def _sync_single_row_to_cloud(self, row_data):
         try:
             cell = self.sheet.find(str(row_data[0]), in_column=1)
-            values = [str(x) if x is not None else "" for x in row_data]
+            values = [str(x) if x is not None else "" for x in row_data[:19]]
             if cell:
                 self.sheet.update(f"A{cell.row}:S{cell.row}", [values])
             else:
@@ -726,7 +796,7 @@ class DatabaseManager:
             raise
 
     def insert_phone_murojaat(self, fish, telefon, viloyat, tuman, yonalish, matn,
-                              masul_komplayens):
+                              masul_komplayens, kategoriya='', yaratgan=''):
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COALESCE(MAX(id), 100) FROM murojaatlar")
@@ -734,16 +804,22 @@ class DatabaseManager:
             aniq_y = ("Davlat kadastrlari palatasi hududiy boshqarmasi"
                       if "palata" in yonalish.lower()
                       else "Kadastr agentligi hududiy boshqarmasi")
-            cursor.execute("""INSERT INTO murojaatlar (id, yaratilgan_sana, fish, telefon, viloyat, tuman, yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan, javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi, manba) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Yangi', ?, '', '', '', 'O‘rganishga yuborilgan', '', '', ?, 'Chora ko‘rilmagan', 'Ishonch telefoni (+998-71-273-19-66)')""",
+            cursor.execute("""INSERT INTO murojaatlar 
+                (id, yaratilgan_sana, fish, telefon, viloyat, tuman, yonalish, aniq_yonalish, 
+                 holat, murojaat_matni, javob, javob_bergan, javob_sanasi, ijro_holati, 
+                 organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi, manba,
+                 kategoriya, yaratgan, yangilangan_vaqt) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Yangi', ?, '', '', '', 'O‘rganishga yuborilgan', 
+                        '', '', ?, 'Chora ko‘rilmagan', 'Ishonch telefoni (+998-71-273-19-66)',
+                        ?, ?, ?)""",
                            (new_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             fish, telefon, viloyat, tuman, yonalish, aniq_y, matn,
-                            masul_komplayens))
+                            masul_komplayens, kategoriya, yaratgan,
+                            datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             conn.commit()
         row_data = self._get_row_by_id(new_id)
         if row_data and self.sheet:
-            threading.Thread(
-                target=lambda: self._sync_single_row_to_cloud(row_data),
-                daemon=True).start()
+            threading.Thread(target=lambda: self._sync_single_row_to_cloud(row_data), daemon=True).start()
         log_info(f"Yangi telefon murojaat: #{new_id}")
         return new_id
 
@@ -765,13 +841,10 @@ class DatabaseManager:
 
     def get_murojaat_fayllar(self, m_id):
         with self._get_connection() as conn:
-            df = pd.read_sql_query("""
+            return pd.read_sql_query("""
                 SELECT id, fayl_nomi, fayl_yoli, yuklangan_vaqt as 'Yuklangan', yuklagan as 'Kim'
-                FROM murojaat_fayllar
-                WHERE murojaat_id = ?
-                ORDER BY id DESC
+                FROM murojaat_fayllar WHERE murojaat_id = ? ORDER BY id DESC
             """, conn, params=(m_id,))
-            return df
 
     def delete_murojaat_fayl(self, fayl_id):
         try:
@@ -806,57 +879,45 @@ class DatabaseManager:
                     old = cursor.fetchone()
                     if not old:
                         continue
-
                     cursor.execute("""
-                        UPDATE murojaatlar 
-                        SET ijro_holati = ?, chora_turi = ?, masul_komplayens = ?
+                        UPDATE murojaatlar SET ijro_holati = ?, chora_turi = ?, 
+                            masul_komplayens = ?, yangilangan_vaqt = ?
                         WHERE id = ?
-                    """, (new_status, new_chora, new_masul, m_id))
-
+                    """, (new_status, new_chora, new_masul,
+                          datetime.now().strftime("%Y-%m-%d %H:%M:%S"), m_id))
                     cursor.execute("""
                         INSERT INTO murojaat_history 
                         (murojaat_id, old_status, new_status, old_chora, new_chora,
                          old_masul, new_masul, natija, ozgartirgan, ozgartirgan_rol, ozgartirilgan_vaqt)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (m_id, old[0], new_status, old[1], new_chora,
-                          old[2], new_masul, "(Bulk yangilash)",
+                          old[2], new_masul, "(Bulk)",
                           ozgartirgan, ozgartirgan_rol,
                           datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                     conn.commit()
                 updated += 1
             except Exception as e:
                 log_error(e, f"bulk #{m_id}")
-        log_info(f"Bulk yangilash: {updated} ta murojaat")
+        log_info(f"Bulk: {updated} ta")
         return updated
 
     def get_trend_stats(self, days=30):
         try:
             with self._get_connection() as conn:
-                df = pd.read_sql_query(
-                    "SELECT yaratilgan_sana, ijro_holati FROM murojaatlar WHERE id > 9",
-                    conn)
+                df = pd.read_sql_query("SELECT yaratilgan_sana FROM murojaatlar WHERE id > 9", conn)
             if df.empty:
                 return {"current": 0, "previous": 0, "change_pct": 0, "change_abs": 0}
-
             df['DT'] = pd.to_datetime(df['yaratilgan_sana'], errors='coerce')
             df = df.dropna(subset=['DT'])
-
             now = datetime.now()
             current_start = now - timedelta(days=days)
             previous_start = current_start - timedelta(days=days)
-
             current = len(df[df['DT'] >= current_start])
             previous = len(df[(df['DT'] >= previous_start) & (df['DT'] < current_start)])
-
             change_abs = current - previous
             change_pct = (change_abs / previous * 100) if previous > 0 else 0
-
-            return {
-                "current": current,
-                "previous": previous,
-                "change_abs": change_abs,
-                "change_pct": round(change_pct, 1),
-            }
+            return {"current": current, "previous": previous,
+                    "change_abs": change_abs, "change_pct": round(change_pct, 1)}
         except Exception as e:
             log_error(e, "trend")
             return {"current": 0, "previous": 0, "change_abs": 0, "change_pct": 0}
@@ -871,8 +932,7 @@ class DatabaseManager:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             for k, v in settings_dict.items():
-                cursor.execute(
-                    "INSERT OR REPLACE INTO sozlamalar (key, val) VALUES (?, ?)", (k, v))
+                cursor.execute("INSERT OR REPLACE INTO sozlamalar (key, val) VALUES (?, ?)", (k, v))
             conn.commit()
 
     def get_xodimlar(self):
@@ -925,11 +985,9 @@ class DatabaseManager:
                     org_filter = '%agentlik%'
                 else:
                     org_filter = '%'
-
                 cursor.execute("""
                     SELECT fish, telefon, telegram_username FROM xodimlar
-                    WHERE viloyat = ? AND LOWER(tashkilot_turi) LIKE ?
-                    LIMIT 1
+                    WHERE viloyat = ? AND LOWER(tashkilot_turi) LIKE ? LIMIT 1
                 """, (viloyat, org_filter))
                 row = cursor.fetchone()
                 if not row:
@@ -938,28 +996,22 @@ class DatabaseManager:
                         (viloyat,))
                     row = cursor.fetchone()
                 if row:
-                    return {
-                        'fish': row[0] or '',
-                        'telefon': row[1] or '',
-                        'username': row[2] or '',
-                    }
+                    return {'fish': row[0] or '', 'telefon': row[1] or '', 'username': row[2] or ''}
         except Exception as e:
             log_error(e, "find_xodim")
         return {}
 
     def get_all_users(self):
         with self._get_connection() as conn:
-            return pd.read_sql_query(
-                "SELECT id, username, password, role FROM users", conn)
+            return pd.read_sql_query("SELECT id, username, password, role FROM users", conn)
 
     def add_user(self, username, password, role):
         try:
             hashed = self.hash_password(password)
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                    (username, hashed, role))
+                cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+                               (username, hashed, role))
                 user_id = cursor.lastrowid
                 conn.commit()
             if self.users_sheet:
@@ -986,16 +1038,14 @@ class DatabaseManager:
                 else:
                     if not self.is_hashed(password):
                         password = self.hash_password(password)
-                cursor.execute(
-                    "UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?",
-                    (username, password, role, user_id))
+                cursor.execute("UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?",
+                               (username, password, role, user_id))
                 conn.commit()
         except sqlite3.IntegrityError:
             return False
         except Exception as e:
             log_error(e, "update_user")
             return False
-
         if self.users_sheet:
             def _upd_cloud():
                 try:
@@ -1022,9 +1072,8 @@ class DatabaseManager:
                 try:
                     cell = self.users_sheet.find(str(user_id), in_column=1)
                     if cell:
-                        self.users_sheet.update(
-                            f"A{cell.row}:E{cell.row}",
-                            [[str(user_id), "DELETED", "", "", 0]])
+                        self.users_sheet.update(f"A{cell.row}:E{cell.row}",
+                                                 [[str(user_id), "DELETED", "", "", 0]])
                 except Exception as e:
                     log_error(e, "cloud delete_user")
             threading.Thread(target=del_cloud, daemon=True).start()
