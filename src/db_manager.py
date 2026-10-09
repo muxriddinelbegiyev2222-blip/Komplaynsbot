@@ -59,7 +59,7 @@ def migrate_credentials():
         if os.path.exists(old):
             try:
                 shutil.copy2(old, secure_path)
-                log_info(f"credentials.json xavfsiz joyga ko'chirildi: {secure_path}")
+                log_info(f"credentials.json xavfsiz joyga ko'chirildi")
                 try:
                     os.remove(old)
                 except OSError:
@@ -182,7 +182,6 @@ class DatabaseManager:
             log_error(e, "auto_backup")
 
     def _cleanup_old_backups(self):
-        """30 kundan eski backuplarni o'chirish."""
         try:
             backup_dir = os.path.join(BASE_DIR, "data", "backup")
             if not os.path.exists(backup_dir):
@@ -263,7 +262,6 @@ class DatabaseManager:
                     yuklagan TEXT
                 )
             """)
-            # OFFLINE QUEUE — internet yo'q paytda o'zgarishlarni saqlash
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS pending_sync (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -318,9 +316,7 @@ class DatabaseManager:
             log_error(e, f"worksheet '{title}'")
             return None
 
-    # ================= OFFLINE QUEUE =================
     def _add_to_pending(self, action_type, murojaat_id, payload=""):
-        """Internet yo'q paytda o'zgarishni navbatga qo'shish."""
         try:
             import json
             with self._get_connection() as conn:
@@ -338,7 +334,6 @@ class DatabaseManager:
             return False
 
     def _process_pending_queue(self):
-        """Internet qaytganda navbatni qayta ishlash."""
         if self.client is None:
             return
         try:
@@ -371,7 +366,6 @@ class DatabaseManager:
             log_error(e, "process_pending")
 
     def get_pending_count(self):
-        """Navbatda nechta o'zgarish borligini qaytaradi."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -380,7 +374,6 @@ class DatabaseManager:
         except Exception:
             return 0
 
-    # ================= RATE LIMITING =================
     def _check_rate_limit(self, username):
         try:
             with self._get_connection() as conn:
@@ -692,7 +685,6 @@ class DatabaseManager:
                 except Exception as e:
                     log_error(e, "history yozish")
 
-        # Cloud sync — internet bo'lmasa, navbatga qo'shish
         row_data = self._get_row_by_id(m_id)
         if row_data:
             if self.sheet:
