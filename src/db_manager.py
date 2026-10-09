@@ -109,7 +109,6 @@ class DatabaseManager:
         self._sync_users()
         self._sync_murojaatlar()
 
-    # ================= XODIMLARNI TO'LDIRISH =================
     def _seed_xodimlar(self):
         try:
             with self._get_connection() as conn:
@@ -132,7 +131,6 @@ class DatabaseManager:
         except Exception as e:
             print(f"⚠️ Xodimlarni to'ldirishda xato: {e}")
 
-    # ================= PAROL HASH =================
     @staticmethod
     def hash_password(password):
         if isinstance(password, str):
@@ -209,7 +207,7 @@ class DatabaseManager:
                     success INTEGER DEFAULT 0
                 )
             """)
-            # YANGI: Statuslar tarixi (audit)
+            # Tarix jadvali (apostrofsiz ustun nomlari!)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS murojaat_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -221,12 +219,11 @@ class DatabaseManager:
                     old_masul TEXT,
                     new_masul TEXT,
                     natija TEXT,
-                    o'zgartirgan TEXT,
-                    o'zgartirgan_rol TEXT,
-                    o'zgartirilgan_vaqt TEXT
+                    ozgartirgan TEXT,
+                    ozgartirgan_rol TEXT,
+                    ozgartirilgan_vaqt TEXT
                 )
             """)
-            # YANGI: Bir nechta fayl
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS murojaat_fayllar (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -548,13 +545,11 @@ class DatabaseManager:
             cursor.execute("SELECT * FROM murojaatlar WHERE id = ?", (m_id,))
             return cursor.fetchone()
 
-    # ================= YANGILANGAN: STATUSLAR TARIXI BILAN =================
     def update_murojaat_ijro(self, m_id, ijro_holati, organish_natijasi,
                              biriktirilgan_fayl='', masul_komplayens='',
                              chora_turi='Chora ko‘rilmagan',
-                             o'zgartirgan='', o'zgartirgan_rol=''):
+                             ozgartirgan='', ozgartirgan_rol=''):
         """Murojaat holatini yangilash + statuslar tarixini yozish."""
-        # Eski qiymatlarni olish
         old_data = None
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -563,7 +558,6 @@ class DatabaseManager:
                 (m_id,))
             old_data = cursor.fetchone()
 
-        # Yangilash
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -572,7 +566,6 @@ class DatabaseManager:
                  masul_komplayens, chora_turi, m_id))
             conn.commit()
 
-        # Tarix yozish (agar o'zgarish bo'lgan bo'lsa)
         if old_data:
             old_ijro, old_chora, old_masul = old_data
             if (old_ijro != ijro_holati or old_chora != chora_turi
@@ -583,11 +576,11 @@ class DatabaseManager:
                         cursor.execute("""
                             INSERT INTO murojaat_history 
                             (murojaat_id, old_status, new_status, old_chora, new_chora,
-                             old_masul, new_masul, natija, o'zgartirgan, o'zgartirgan_rol, o'zgartirilgan_vaqt)
+                             old_masul, new_masul, natija, ozgartirgan, ozgartirgan_rol, ozgartirilgan_vaqt)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (m_id, old_ijro, ijro_holati, old_chora, chora_turi,
                               old_masul, masul_komplayens, organish_natijasi,
-                              o'zgartirgan, o'zgartirgan_rol,
+                              ozgartirgan, ozgartirgan_rol,
                               datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                         conn.commit()
                 except Exception as e:
@@ -603,9 +596,9 @@ class DatabaseManager:
         """Murojaat tarixini qaytaradi."""
         with self._get_connection() as conn:
             df = pd.read_sql_query("""
-                SELECT o'zgartirilgan_vaqt as 'Vaqt',
-                       o'zgartirgan as 'Kim',
-                       o'zgartirgan_rol as 'Rol',
+                SELECT ozgartirilgan_vaqt as 'Vaqt',
+                       ozgartirgan as 'Kim',
+                       ozgartirgan_rol as 'Rol',
                        old_status as 'Eski holat',
                        new_status as 'Yangi holat',
                        old_chora as 'Eski chora',
@@ -649,9 +642,7 @@ class DatabaseManager:
                 daemon=True).start()
         return new_id
 
-    # ================= YANGI: KO'P FAYL BOSHQARUVI =================
     def add_murojaat_fayl(self, m_id, fayl_nomi, fayl_yoli, yuklagan=''):
-        """Murojaatga yangi fayl qo'shish."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -668,7 +659,6 @@ class DatabaseManager:
             return False
 
     def get_murojaat_fayllar(self, m_id):
-        """Murojaatga biriktirilgan barcha fayllarni qaytaradi."""
         with self._get_connection() as conn:
             df = pd.read_sql_query("""
                 SELECT id, fayl_nomi, fayl_yoli, yuklangan_vaqt as 'Yuklangan', yuklagan as 'Kim'
@@ -679,7 +669,6 @@ class DatabaseManager:
             return df
 
     def delete_murojaat_fayl(self, fayl_id):
-        """Faylni bazadan va diskdan o'chirish."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -687,13 +676,11 @@ class DatabaseManager:
                 row = cursor.fetchone()
                 if row:
                     fayl_yoli = row[0]
-                    # Diskdan o'chirish
                     try:
                         if fayl_yoli and os.path.exists(fayl_yoli):
                             os.remove(fayl_yoli)
                     except OSError:
                         pass
-                    # Bazadan o'chirish
                     cursor.execute("DELETE FROM murojaat_fayllar WHERE id = ?", (fayl_id,))
                     conn.commit()
                     return True
@@ -701,14 +688,11 @@ class DatabaseManager:
             pass
         return False
 
-    # ================= YANGI: BULK ACTIONS =================
     def bulk_update_status(self, m_id_list, new_status, new_chora, new_masul,
-                           o'zgartirgan='', o'zgartirgan_rol=''):
-        """Ko'p murojaatni bir vaqtda yangilash."""
+                           ozgartirgan='', ozgartirgan_rol=''):
         updated = 0
         for m_id in m_id_list:
             try:
-                # Eski qiymatlar
                 with self._get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
@@ -724,15 +708,14 @@ class DatabaseManager:
                         WHERE id = ?
                     """, (new_status, new_chora, new_masul, m_id))
 
-                    # Tarix yozish
                     cursor.execute("""
                         INSERT INTO murojaat_history 
                         (murojaat_id, old_status, new_status, old_chora, new_chora,
-                         old_masul, new_masul, natija, o'zgartirgan, o'zgartirgan_rol, o'zgartirilgan_vaqt)
+                         old_masul, new_masul, natija, ozgartirgan, ozgartirgan_rol, ozgartirilgan_vaqt)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (m_id, old[0], new_status, old[1], new_chora,
                           old[2], new_masul, "(Bulk yangilash)",
-                          o'zgartirgan, o'zgartirgan_rol,
+                          ozgartirgan, ozgartirgan_rol,
                           datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                     conn.commit()
                 updated += 1
@@ -740,9 +723,7 @@ class DatabaseManager:
                 print(f"⚠️ Bulk yangilash xato #{m_id}: {e}")
         return updated
 
-    # ================= YANGI: TREND TAHLILI =================
     def get_trend_stats(self, days=30):
-        """O'tgan davrga nisbatan trend statistikasi."""
         try:
             with self._get_connection() as conn:
                 df = pd.read_sql_query(
@@ -774,7 +755,6 @@ class DatabaseManager:
             print(f"⚠️ Trend hisoblashda xato: {e}")
             return {"current": 0, "previous": 0, "change_abs": 0, "change_pct": 0}
 
-    # ================= SOZLAMALAR =================
     def get_settings(self):
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -789,7 +769,6 @@ class DatabaseManager:
                     "INSERT OR REPLACE INTO sozlamalar (key, val) VALUES (?, ?)", (k, v))
             conn.commit()
 
-    # ================= XODIMLAR =================
     def get_xodimlar(self):
         with self._get_connection() as conn:
             return pd.read_sql_query(
@@ -861,7 +840,6 @@ class DatabaseManager:
             pass
         return {}
 
-    # ================= FOYDALANUVCHILAR =================
     def get_all_users(self):
         with self._get_connection() as conn:
             return pd.read_sql_query(
