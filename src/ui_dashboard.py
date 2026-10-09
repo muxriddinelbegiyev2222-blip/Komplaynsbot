@@ -475,7 +475,7 @@ class DashboardApp(ctk.CTk):
                      font=ctk.CTkFont(size=12, weight="bold"),
                      text_color="#0F2537").pack(anchor="w", padx=12, pady=(6, 3))
 
-        table_frame = ctk.CTkFrame(table_container, fgcolor="transparent")
+        table_frame = ctk.CTkFrame(table_container, fg_color="transparent")
         table_frame.pack(fill="both", expand=True, padx=12, pady=(0, 8))
 
         cols = ("viloyat", "jami", "tg_m", "tel_m", "agentlik_org", "palata_org", "hal_etilgan", "asossiz")
