@@ -10,19 +10,12 @@ from datetime import datetime, timedelta
 import urllib3
 import requests
 
-# SSL tekshiruvi YOQILGAN (xavfsiz)
 urllib3.disable_warnings()
-# urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  # ENDI ISHLATILMAYDI
 
-# MUHIM: SSL tekshiruvi ENDI O'CHIRILMAGAN
-# (avval xato bor edi, endi xavfsiz)
 _orig_session_init = requests.Session.__init__
 def _no_ssl_session_init(self, *args, **kwargs):
     _orig_session_init(self, *args, **kwargs)
-    # self.verify = False  # ❌ OLIB TASHLANDI
 requests.Session.__init__ = _no_ssl_session_init
-
-# ssl._create_default_https_context = ssl._create_unverified_context  # ❌ OLIB TASHLANDI
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -37,17 +30,13 @@ except ImportError:
     HAS_GSHEETS = False
 
 
-# ================= RATE LIMITING SOZLAMALARI =================
+# ================= RATE LIMITING =================
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_MINUTES = 5
 
+
 # ================= CREDENTIALS HIMOYASI =================
 def get_secure_credentials_path():
-    """
-    credentials.json uchun xavfsiz joyni qaytaradi:
-    - Windows: %APPDATA%/Komplaynsbot/credentials.json
-    - Linux/Mac: ~/.config/Komplaynsbot/credentials.json
-    """
     if sys.platform == "win32":
         base = os.environ.get("APPDATA", os.path.expanduser("~"))
     else:
@@ -58,14 +47,9 @@ def get_secure_credentials_path():
 
 
 def migrate_credentials():
-    """
-    Eski joydagi credentials.json ni xavfsiz joyga ko'chiradi.
-    """
     secure_path = get_secure_credentials_path()
     if os.path.exists(secure_path):
-        return secure_path  # allaqachon xavfsiz joyda
-    
-    # Eski joylarni tekshirish
+        return secure_path
     old_paths = [
         os.path.join(BASE_DIR, "data", "credentials.json"),
         os.path.join(BASE_DIR, "credentials.json"),
@@ -75,10 +59,8 @@ def migrate_credentials():
             try:
                 shutil.copy2(old, secure_path)
                 print(f"✅ credentials.json xavfsiz joyga ko'chirildi: {secure_path}")
-                # Eski faylni o'chirish (xavfsizlik uchun)
                 try:
                     os.remove(old)
-                    print(f"🗑 Eski credentials.json o'chirildi: {old}")
                 except OSError:
                     pass
                 return secure_path
@@ -87,17 +69,41 @@ def migrate_credentials():
     return secure_path
 
 
+# ================= VILOYATLAR VA TASHKILOTLAR =================
+VILOYATLAR = [
+    "Toshkent shahri",
+    "Toshkent viloyati",
+    "Samarqand viloyati",
+    "Buxoro viloyati",
+    "Farg'ona viloyati",
+    "Andijon viloyati",
+    "Namangan viloyati",
+    "Qashqadaryo viloyati",
+    "Surxondaryo viloyati",
+    "Jizzax viloyati",
+    "Sirdaryo viloyati",
+    "Navoiy viloyati",
+    "Xorazm viloyati",
+    "Qoraqalpog'iston Respublikasi",
+]
+
+TASHKILOTLAR = [
+    "Kadastr agentligi hududiy boshqarmasi",
+    "Davlat kadastrlari palatasi hududiy boshqarmasi",
+]
+
+
 class DatabaseManager:
     def __init__(self, db_path=None):
         data_dir = os.path.join(BASE_DIR, "data")
         os.makedirs(data_dir, exist_ok=True)
         self.db_path = db_path if db_path else os.path.join(data_dir, "murojaatlar.db")
 
-        # Credentials xavfsiz joyga ko'chirildi
         self.json_key_path = migrate_credentials()
         self.sheet_name = "Murojaatlar_Bazasi"
 
         self._init_db()
+        self._seed_xodimlar()  # ← XODIMLARNI AVTOMATIK TO'LDIRISH
         self._auto_backup()
 
         self.client = self._connect_gsheets()
@@ -115,10 +121,39 @@ class DatabaseManager:
         self._sync_users()
         self._sync_murojaatlar()
 
-    # ================= XAVFSIZLIK: PAROL HASH =================
+    # ================= XODIMLARNI AVTOMATIK TO'LDIRISH =================
+    def _seed_xodimlar(self):
+        """
+        Agar xodimlar jadvali bo'sh bo'lsa, 14 ta viloyat × 2 ta tashkilot = 28 ta
+        yozuv qo'shadi. Har biriga F.I.Sh, telefon va telegram uchun bo'sh joy qoldiradi.
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM xodimlar")
+                count = cursor.fetchone()[0]
+                
+                if count > 0:
+                    print(f"ℹ️ Xodimlar jadvali allaqachon to'ldirilgan: {count} ta yozuv")
+                    return
+                
+                print("📋 Xodimlar jadvali bo'sh — avtomatik to'ldirilmoqda...")
+                for vil in VILOYATLAR:
+                    for tash in TASHKILOTLAR:
+                        cursor.execute(
+                            """INSERT INTO xodimlar 
+                               (viloyat, tashkilot_turi, fish, telefon, telegram_username) 
+                               VALUES (?, ?, ?, ?, ?)""",
+                            (vil, tash, "", "", "")
+                        )
+                conn.commit()
+                print(f"✅ {len(VILOYATLAR) * len(TASHKILOTLAR)} ta xodim yozuvi qo'shildi")
+        except Exception as e:
+            print(f"⚠️ Xodimlarni to'ldirishda xato: {e}")
+
+    # ================= PAROL HASH =================
     @staticmethod
     def hash_password(password):
-        """Parolni bcrypt bilan hash qilish."""
         if isinstance(password, str):
             password = password.encode('utf-8')
         salt = bcrypt.gensalt()
@@ -126,7 +161,6 @@ class DatabaseManager:
 
     @staticmethod
     def check_password(password, hashed):
-        """Parolni hash bilan solishtirish."""
         if not hashed:
             return False
         try:
@@ -140,11 +174,9 @@ class DatabaseManager:
 
     @staticmethod
     def is_hashed(password):
-        """Parol hash qilinganmi yoki yo'qmi aniqlash."""
         if not password:
             return False
         pwd_str = str(password)
-        # bcrypt hash doim $2b$, $2a$, yoki $2y$ bilan boshlanadi va 60 belgi
         return pwd_str.startswith(('$2b$', '$2a$', '$2y$')) and len(pwd_str) == 60
 
     def _get_connection(self):
@@ -188,7 +220,6 @@ class DatabaseManager:
                     id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, role TEXT, kirish_vaqti TEXT, kompyuter TEXT
                 )
             """)
-            # YANGI: Login urinishlarini kuzatish
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS login_attempts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -201,14 +232,13 @@ class DatabaseManager:
 
             cursor.execute("SELECT COUNT(*) FROM users")
             if cursor.fetchone()[0] == 0:
-                # Standart foydalanuvchilar (hash qilingan parollar)
                 admin_hash = self.hash_password("admin123")
                 rahbar_hash = self.hash_password("1977")
                 cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
                                ("admin", admin_hash, "admin"))
                 cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
                                ("rahbar", rahbar_hash, "kuzatuvchi"))
-                print("✅ Standart foydalanuvchilar hash qilingan parollar bilan yaratildi")
+                print("✅ Standart foydalanuvchilar yaratildi")
             conn.commit()
 
     def _connect_gsheets(self):
@@ -219,7 +249,6 @@ class DatabaseManager:
                      "https://www.googleapis.com/auth/drive"]
             creds = ServiceAccountCredentials.from_json_keyfile_name(self.json_key_path, scope)
             client = gspread.authorize(creds)
-            # SSL tekshiruvi YOQILGAN
             return client
         except Exception as e:
             print(f"⚠️ Google Sheets ulanmadi: {e}")
@@ -241,25 +270,17 @@ class DatabaseManager:
             print(f"⚠️ Worksheet '{title}' yaratilmadi: {e}")
             return None
 
-    # ================= LOGIN RATE LIMITING =================
     def _check_rate_limit(self, username):
-        """
-        Login urinishlarini tekshirish.
-        Qaytaradi: (blocked: bool, remaining_minutes: int)
-        """
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
-                # Oxirgi LOCKOUT_MINUTES daqiqadagi muvaffaqiyatsiz urinishlar
                 cutoff = (datetime.now() - timedelta(minutes=LOCKOUT_MINUTES)).strftime("%Y-%m-%d %H:%M:%S")
                 cursor.execute("""
                     SELECT COUNT(*) FROM login_attempts
                     WHERE username = ? AND success = 0 AND attempt_time > ?
                 """, (username, cutoff))
                 fail_count = cursor.fetchone()[0]
-                
                 if fail_count >= MAX_LOGIN_ATTEMPTS:
-                    # Oxirgi urinishdan qancha vaqt o'tgan
                     cursor.execute("""
                         SELECT attempt_time FROM login_attempts
                         WHERE username = ? AND success = 0
@@ -279,7 +300,6 @@ class DatabaseManager:
             return False, 0
 
     def _log_login_attempt(self, username, success):
-        """Login urinishini bazaga yozish."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -287,7 +307,6 @@ class DatabaseManager:
                     INSERT INTO login_attempts (username, attempt_time, success)
                     VALUES (?, ?, ?)
                 """, (username, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 1 if success else 0))
-                # Eski urinishlarni tozalash (7 kundan eski)
                 cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
                 cursor.execute("DELETE FROM login_attempts WHERE attempt_time < ?", (cutoff,))
                 conn.commit()
@@ -313,38 +332,27 @@ class DatabaseManager:
         except Exception:
             pass
 
-    # ================= ASOSIY LOGIN TEKSHIRUVI (RATE LIMIT + HASH) =================
     def check_user_login(self, username, password):
-        """
-        Login tekshiruvi:
-        1. Rate limiting (5 xato → 5 daqiqa blok)
-        2. bcrypt hash tekshiruv
-        3. Eski plaintext parollarni avtomatik hash qilish
-        """
         username = str(username).strip()
         password = str(password).strip()
-        
-        # 1. Rate limiting tekshiruvi
+
         blocked, remaining = self._check_rate_limit(username)
         if blocked:
             print(f"🚫 Login bloklangan: {username} ({remaining} daqiqa qoldi)")
             return None
-        
-        # 2. Bazadan foydalanuvchini olish
+
         found_role = None
         found_password = None
-        user_id = None
-        
+
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id, password, role FROM users WHERE username = ? AND active = 1",
+                "SELECT password, role FROM users WHERE username = ? AND active = 1",
                 (username,))
             res = cursor.fetchone()
             if res:
-                user_id, found_password, found_role = res
-        
-        # 3. Agar bazada topilmasa - Google Sheets'dan qidirish
+                found_password, found_role = res
+
         if not found_role and self.users_sheet:
             try:
                 records = self.users_sheet.get_all_records()
@@ -353,21 +361,15 @@ class DatabaseManager:
                             and int(row.get('Active', 1)) == 1):
                         cloud_password = str(row.get('Password', '')).strip()
                         cloud_role = str(row.get('Role', '')).strip()
-                        
-                        # Cloud'dagi parolni tekshirish
                         if self.is_hashed(cloud_password):
                             if self.check_password(password, cloud_password):
                                 found_role = cloud_role
                                 found_password = cloud_password
                         else:
-                            # Eski plaintext parol
                             if cloud_password == password:
                                 found_role = cloud_role
-                                # Hash qilib bazaga saqlash
                                 found_password = self.hash_password(password)
-                        
                         if found_role:
-                            # Bazaga qo'shish
                             with self._get_connection() as conn:
                                 cursor = conn.cursor()
                                 cursor.execute(
@@ -377,22 +379,17 @@ class DatabaseManager:
                             break
             except Exception:
                 pass
-        
-        # 4. Parolni tekshirish
+
         if found_role and found_password:
-            # Agar parol hash qilingan bo'lsa
             if self.is_hashed(found_password):
                 if self.check_password(password, found_password):
-                    # ✅ Muvaffaqiyatli
                     self._log_login_attempt(username, True)
                     self.log_user_entry(username, found_role)
                     return found_role
                 else:
-                    # ❌ Parol xato
                     self._log_login_attempt(username, False)
                     return None
             else:
-                # Eski plaintext parol - hash qilib saqlash
                 if found_password == password:
                     new_hash = self.hash_password(password)
                     try:
@@ -402,11 +399,9 @@ class DatabaseManager:
                                 "UPDATE users SET password = ? WHERE username = ?",
                                 (new_hash, username))
                             conn.commit()
-                        print(f"✅ Eski plaintext parol hash qilindi: {username}")
+                        print(f"✅ Eski parol hash qilindi: {username}")
                     except Exception:
                         pass
-                    
-                    # Cloud'ga ham hash qilingan parolni yuborish
                     if self.users_sheet:
                         def _update_cloud_pwd():
                             try:
@@ -416,15 +411,12 @@ class DatabaseManager:
                             except Exception:
                                 pass
                         threading.Thread(target=_update_cloud_pwd, daemon=True).start()
-                    
                     self._log_login_attempt(username, True)
                     self.log_user_entry(username, found_role)
                     return found_role
                 else:
                     self._log_login_attempt(username, False)
                     return None
-        
-        # ❌ Topilmadi
         self._log_login_attempt(username, False)
         return None
 
@@ -444,18 +436,14 @@ class DatabaseManager:
                     if not un or un == 'DELETED':
                         continue
                     cloud_usernames.add(un)
-                    
-                    # Agar cloud'dagi parol plaintext bo'lsa - hash qilamiz
                     if pw and not self.is_hashed(pw):
                         pw = self.hash_password(pw)
-                        # Cloud'ga yangilangan hashni yuborish
                         try:
                             cell = self.users_sheet.find(un, in_column=2)
                             if cell:
                                 self.users_sheet.update_cell(cell.row, 3, pw)
                         except Exception:
                             pass
-                    
                     cursor.execute("SELECT id FROM users WHERE username = ?", (un,))
                     if not cursor.fetchone():
                         cursor.execute(
@@ -660,18 +648,48 @@ class DatabaseManager:
                     "INSERT OR REPLACE INTO sozlamalar (key, val) VALUES (?, ?)", (k, v))
             conn.commit()
 
+    # ================= XODIMLAR =================
     def get_xodimlar(self):
+        """Barcha xodimlar ro'yxatini qaytaradi (viloyat va tashkilot bo'yicha tartiblangan)."""
         with self._get_connection() as conn:
             return pd.read_sql_query(
                 "SELECT * FROM xodimlar ORDER BY viloyat ASC, tashkilot_turi ASC", conn)
 
     def save_xodim(self, x_id, fish, telefon, telegram_username):
+        """Mavjud xodim ma'lumotlarini yangilash."""
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "UPDATE xodimlar SET fish = ?, telefon = ?, telegram_username = ? WHERE id = ?",
                 (fish, telefon, telegram_username, x_id))
             conn.commit()
+
+    def add_xodim(self, viloyat, tashkilot_turi, fish, telefon, telegram_username):
+        """Yangi xodim qo'shish."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """INSERT INTO xodimlar 
+                       (viloyat, tashkilot_turi, fish, telefon, telegram_username) 
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (viloyat, tashkilot_turi, fish, telefon, telegram_username))
+                conn.commit()
+                return True
+        except Exception as e:
+            print(f"⚠️ Xodim qo'shishda xato: {e}")
+            return False
+
+    def delete_xodim(self, x_id):
+        """Xodimni o'chirish."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM xodimlar WHERE id = ?", (x_id,))
+                conn.commit()
+                return True
+        except Exception:
+            return False
 
     def find_xodim_for_region(self, viloyat, masul_turi=''):
         try:
@@ -689,117 +707,3 @@ class DatabaseManager:
                     SELECT fish, telefon, telegram_username FROM xodimlar
                     WHERE viloyat = ? AND LOWER(tashkilot_turi) LIKE ?
                     LIMIT 1
-                """, (viloyat, org_filter))
-                row = cursor.fetchone()
-                if not row:
-                    cursor.execute(
-                        "SELECT fish, telefon, telegram_username FROM xodimlar WHERE viloyat = ? LIMIT 1",
-                        (viloyat,))
-                    row = cursor.fetchone()
-                if row:
-                    return {
-                        'fish': row[0] or '',
-                        'telefon': row[1] or '',
-                        'username': row[2] or '',
-                    }
-        except Exception:
-            pass
-        return {}
-
-    def get_all_users(self):
-        with self._get_connection() as conn:
-            return pd.read_sql_query(
-                "SELECT id, username, password, role FROM users", conn)
-
-    def add_user(self, username, password, role):
-        try:
-            # Parolni hash qilish
-            hashed = self.hash_password(password)
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                    (username, hashed, role))
-                user_id = cursor.lastrowid
-                conn.commit()
-            if self.users_sheet:
-                threading.Thread(
-                    target=lambda: self.users_sheet.append_row(
-                        [str(user_id), str(username), str(hashed), str(role), 1]),
-                    daemon=True).start()
-            return True
-        except sqlite3.IntegrityError:
-            return False
-
-    def update_user(self, user_id, username, password, role):
-        try:
-            with self._get_connection() as conn:
-                cursor = conn.cursor()
-                if not str(password).strip():
-                    # Parol bo'sh - eskisini saqlab qolamiz
-                    cursor.execute("SELECT password FROM users WHERE id = ?", (user_id,))
-                    r = cursor.fetchone()
-                    if r:
-                        password = r[0]
-                else:
-                    # Yangi parolni hash qilish
-                    if not self.is_hashed(password):
-                        password = self.hash_password(password)
-                
-                cursor.execute(
-                    "UPDATE users SET username = ?, password = ?, role = ? WHERE id = ?",
-                    (username, password, role, user_id))
-                conn.commit()
-        except sqlite3.IntegrityError:
-            return False
-        except Exception:
-            return False
-
-        if self.users_sheet:
-            def _upd_cloud():
-                try:
-                    cell = self.users_sheet.find(str(user_id), in_column=1)
-                    vals = [str(user_id), str(username), str(password), str(role), 1]
-                    if cell:
-                        self.users_sheet.update(f"A{cell.row}:E{cell.row}", [vals])
-                    else:
-                        self.users_sheet.append_row(vals)
-                except Exception:
-                    pass
-            threading.Thread(target=_upd_cloud, daemon=True).start()
-        return True
-
-    def delete_user(self, user_id):
-        if str(user_id) == "1":
-            return False
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
-            conn.commit()
-        if self.users_sheet:
-            def del_cloud():
-                try:
-                    cell = self.users_sheet.find(str(user_id), in_column=1)
-                    if cell:
-                        self.users_sheet.update(
-                            f"A{cell.row}:E{cell.row}",
-                            [[str(user_id), "DELETED", "", "", 0]])
-                except Exception:
-                    pass
-            threading.Thread(target=del_cloud, daemon=True).start()
-        return True
-
-    def get_audit_logs(self):
-        with self._get_connection() as conn:
-            return pd.read_sql_query(
-                "SELECT id as '#', username as 'Foydalanuvchi', role as 'Rol', kirish_vaqti as 'Kirish vaqti', kompyuter as 'Kompyuter' FROM audit_logs ORDER BY id DESC LIMIT 200",
-                conn)
-
-    def sync_pull_from_cloud(self):
-        if self.client is None:
-            raise RuntimeError("Google Sheets ulanmagan")
-        self._sync_users()
-        self._sync_murojaatlar()
-
-    def _sync_pull_from_cloud(self):
-        return self.sync_pull_from_cloud()
