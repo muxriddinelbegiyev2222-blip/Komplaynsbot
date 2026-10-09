@@ -290,17 +290,27 @@ class DashboardApp(ctk.CTk):
         cb_theme.set(self._t(self.current_theme))
         cb_theme.pack(side="right", padx=3, pady=15)
 
+        ctk.CTkButton(nav, text=self._t("📊 Statistika"), width=120, height=34,
+                      fg_color="#16A085", hover_color="#138D75",
+                      font=ctk.CTkFont(size=11, weight="bold"),
+                      command=self.show_stats_view).pack(side="right", padx=3, pady=15)
+
         ctk.CTkButton(nav, text=self._t("📈 Grafiklar"), width=105, height=34,
                       fg_color="#8E44AD", hover_color="#7D3C98",
                       font=ctk.CTkFont(size=11, weight="bold"),
                       command=self.show_charts_view).pack(side="right", padx=3, pady=15)
 
-        ctk.CTkButton(nav, text=self._t("📄 Word"), width=90, height=34,
+        ctk.CTkButton(nav, text=self._t("📄 Word"), width=85, height=34,
                       fg_color="#8B3A2B", hover_color="#A94442",
                       font=ctk.CTkFont(size=11, weight="bold"),
                       command=self._export_word).pack(side="right", padx=3, pady=15)
 
-        ctk.CTkButton(nav, text=self._t("📊 Excel"), width=90, height=34,
+        ctk.CTkButton(nav, text=self._t("📕 PDF"), width=85, height=34,
+                      fg_color="#C0392B", hover_color="#A93226",
+                      font=ctk.CTkFont(size=11, weight="bold"),
+                      command=self._export_pdf).pack(side="right", padx=3, pady=15)
+
+        ctk.CTkButton(nav, text=self._t("📊 Excel"), width=85, height=34,
                       fg_color="#1E6B47", hover_color="#258357",
                       font=ctk.CTkFont(size=11, weight="bold"),
                       command=self._export_excel).pack(side="right", padx=3, pady=15)
@@ -414,7 +424,6 @@ class DashboardApp(ctk.CTk):
                       fg_color="#64748B", hover_color="#475569", font=ctk.CTkFont(size=11),
                       command=self._reset_filters).pack(side="left", padx=6, pady=7)
 
-        # Pending indicator
         try:
             pending = self.loader.db.get_pending_count()
             if pending > 0:
@@ -540,6 +549,7 @@ class DashboardApp(ctk.CTk):
 
         self.dash_tree.bind("<Double-1>", on_region_double_click)
 
+        # Trend
         trend = self.loader.db.get_trend_stats(days=30)
         trend_card = ctk.CTkFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
                                   border_width=1, border_color="#CBD5E1")
@@ -581,7 +591,6 @@ class DashboardApp(ctk.CTk):
 
         top_bar = ctk.CTkFrame(main_box, fg_color="transparent")
         top_bar.pack(fill="x", padx=15, pady=8)
-
         ctk.CTkLabel(top_bar, text=self._t("🔍"), font=ctk.CTkFont(size=12, weight="bold"),
                      text_color="#0F2537").pack(side="left", padx=(0, 5))
         entry_search = ctk.CTkEntry(top_bar, placeholder_text=self._t("F.I.Sh, tel, tuman..."),
@@ -693,12 +702,10 @@ class DashboardApp(ctk.CTk):
         win.geometry("600x520")
         win.grab_set()
         win.transient(self)
-
         ctk.CTkLabel(win, text=self._t("⚡ BULK AMALLAR"),
                      font=ctk.CTkFont(size=14, weight="bold")).pack(pady=10)
-        ctk.CTkLabel(win, text=self._t("ID larni kiriting (har bir yangi qatorda):"),
+        ctk.CTkLabel(win, text=self._t("ID larni kiriting:"),
                      font=ctk.CTkFont(size=11, slant="italic")).pack(pady=(0, 5))
-
         tb_ids = ctk.CTkTextbox(win, height=120, font=ctk.CTkFont(size=12))
         tb_ids.pack(fill="x", padx=20, pady=5)
         all_ids = "\n".join([str(x) for x in data_df['#'].head(10).tolist()])
@@ -707,31 +714,25 @@ class DashboardApp(ctk.CTk):
         form = ctk.CTkFrame(win, fg_color="#F8FAFC", corner_radius=6,
                             border_width=1, border_color="#CBD5E1")
         form.pack(fill="x", padx=20, pady=10)
-
-        ctk.CTkLabel(form, text=self._t("Holat:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=15, pady=(10, 2))
+        ctk.CTkLabel(form, text=self._t("Holat:")).pack(anchor="w", padx=15, pady=(10, 2))
         cb_status = ctk.CTkComboBox(form, values=[self._t(v) for v in [
             "O‘rganishga yuborilgan", "O‘rganib chiqildi / Bartaraf etildi",
-            "Ijobiy hal etildi", "Intizomiy chora ko‘rildi", "Asossiz deb topildi"
-        ]], width=400, font=ctk.CTkFont(size=12))
+            "Ijobiy hal etildi", "Intizomiy chora ko‘rildi", "Asossiz deb topildi"]],
+            width=400, font=ctk.CTkFont(size=12))
         cb_status.set(self._t("O‘rganib chiqildi / Bartaraf etildi"))
         cb_status.pack(anchor="w", padx=15)
-
-        ctk.CTkLabel(form, text=self._t("Chora:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=15, pady=(10, 2))
+        ctk.CTkLabel(form, text=self._t("Chora:")).pack(anchor="w", padx=15, pady=(10, 2))
         cb_chora = ctk.CTkComboBox(form, values=[self._t(v) for v in [
             "Chora ko‘rilmagan", "Xayfsan e'lon qilindi", "Jarima qo‘llandi",
-            "Lavozimidan ozod etildi", "Prokuraturaga yuborildi", "Asossiz deb topildi"
-        ]], width=400, font=ctk.CTkFont(size=12))
+            "Lavozimidan ozod etildi", "Prokuraturaga yuborildi", "Asossiz deb topildi"]],
+            width=400, font=ctk.CTkFont(size=12))
         cb_chora.set(self._t("Chora ko‘rilmagan"))
         cb_chora.pack(anchor="w", padx=15)
-
-        ctk.CTkLabel(form, text=self._t("Mas'ul:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=15, pady=(10, 2))
+        ctk.CTkLabel(form, text=self._t("Mas'ul:")).pack(anchor="w", padx=15, pady=(10, 2))
         cb_masul = ctk.CTkComboBox(form, values=[self._t(v) for v in [
             "Kadastr agentligi hududiy komplayens xodimi",
-            "Davlat kadastrlari palatasi hududiy komplayens xodimi"
-        ]], width=400, font=ctk.CTkFont(size=12))
+            "Davlat kadastrlari palatasi hududiy komplayens xodimi"]],
+            width=400, font=ctk.CTkFont(size=12))
         cb_masul.set(self._t("Kadastr agentligi hududiy komplayens xodimi"))
         cb_masul.pack(anchor="w", padx=15, pady=(0, 15))
 
@@ -746,10 +747,9 @@ class DashboardApp(ctk.CTk):
                 messagebox.showerror(self._t("Xato"), self._t("ID noto'g'ri!"))
                 return
             if not id_list:
-                messagebox.showwarning(self._t("Xato"), self._t("ID topilmadi!"))
                 return
             if not messagebox.askyesno(self._t("Tasdiqlash"),
-                                       self._t(f"{len(id_list)} ta murojaatni yangilaysizmi?")):
+                                       self._t(f"{len(id_list)} ta yangilansinmi?")):
                 return
             st = self._to_latin(cb_status.get())
             ch = self._to_latin(cb_chora.get())
@@ -783,7 +783,6 @@ class DashboardApp(ctk.CTk):
             return
 
         sets = self.loader.db.get_settings()
-
         main_scroll = ctk.CTkScrollableFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
                                               border_width=1, border_color="#CBD5E1")
         main_scroll.pack(fill="both", expand=True, padx=4, pady=4)
@@ -791,7 +790,6 @@ class DashboardApp(ctk.CTk):
         info_top = ctk.CTkFrame(main_scroll, fg_color="#F1F5F9", corner_radius=6,
                                 border_width=1, border_color="#CBD5E1")
         info_top.pack(fill="x", padx=15, pady=(10, 6))
-
         txt_info = (f"👤 {self._t(rec.get('F.I.Sh.'))}   |   📞 {rec.get('Telefon')}   |   "
                     f"📍 {self._t(rec.get('Viloyat'))}, {self._t(rec.get('Tuman'))}\n"
                     f"📡 {self._t(rec.get('Manba', 'Telegram bot'))}   |   "
@@ -801,8 +799,7 @@ class DashboardApp(ctk.CTk):
                      text_color="#0F2537").pack(padx=15, pady=8, anchor="w")
 
         ctk.CTkLabel(main_scroll, text=self._t("📝 Murojaat matni:"),
-                     font=ctk.CTkFont(size=13, weight="bold"),
-                     text_color="#0F2537").pack(padx=15, anchor="w")
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(padx=15, anchor="w")
         tb_m = ctk.CTkTextbox(main_scroll, height=120, wrap="word", font=ctk.CTkFont(size=13))
         tb_m.insert("1.0", self._t(str(rec.get('Murojaat matni', ''))))
         tb_m.configure(state="disabled")
@@ -813,13 +810,11 @@ class DashboardApp(ctk.CTk):
         action_frame.pack(fill="x", padx=15, pady=(4, 10))
 
         ctk.CTkLabel(action_frame, text=self._t("⚙️ NAZORAT:"),
-                     font=ctk.CTkFont(size=12, weight="bold"),
-                     text_color="#0F2537").pack(padx=15, pady=(6, 2), anchor="w")
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(padx=15, pady=(6, 2), anchor="w")
 
         row_masul = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_masul.pack(fill="x", padx=15, pady=3)
-        ctk.CTkLabel(row_masul, text=self._t("Mas'ul:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(row_masul, text=self._t("Mas'ul:")).pack(side="left", padx=(0, 8))
         cb_masul_item = ctk.CTkComboBox(row_masul, values=[self._t(v) for v in [
             "Kadastr agentligi hududiy komplayens xodimi",
             "Davlat kadastrlari palatasi hududiy komplayens xodimi"]],
@@ -857,7 +852,6 @@ class DashboardApp(ctk.CTk):
                 webbrowser.open(url)
             except webbrowser.Error as e:
                 log_error(e, "telegram")
-                messagebox.showerror(self._t("Xatolik"), str(e))
 
         ctk.CTkButton(row_masul, text=self._t("✈️ Telegram"), width=120, height=28,
                       fg_color="#0088CC", hover_color="#0077B5",
@@ -866,17 +860,14 @@ class DashboardApp(ctk.CTk):
 
         row_status = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_status.pack(fill="x", padx=15, pady=3)
-        ctk.CTkLabel(row_status, text=self._t("Holat:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(row_status, text=self._t("Holat:")).pack(side="left", padx=(0, 8))
         cb_status = ctk.CTkComboBox(row_status, values=[self._t(v) for v in [
             "O‘rganishga yuborilgan", "O‘rganib chiqildi / Bartaraf etildi",
             "Ijobiy hal etildi", "Intizomiy chora ko‘rildi", "Asossiz deb topildi"]],
             width=230, font=ctk.CTkFont(size=12))
         cb_status.set(self._t(str(rec.get('Ijro_Holati', 'O‘rganishga yuborilgan'))))
         cb_status.pack(side="left", padx=(0, 15))
-
-        ctk.CTkLabel(row_status, text=self._t("Chora:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(row_status, text=self._t("Chora:")).pack(side="left", padx=(0, 8))
         cb_chora = ctk.CTkComboBox(row_status, values=[self._t(v) for v in [
             "Chora ko‘rilmagan", "Xayfsan e'lon qilindi", "Jarima qo‘llandi",
             "Lavozimidan ozod etildi", "Prokuraturaga yuborildi", "Asossiz deb topildi"]],
@@ -886,15 +877,13 @@ class DashboardApp(ctk.CTk):
 
         row_kat = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_kat.pack(fill="x", padx=15, pady=3)
-        ctk.CTkLabel(row_kat, text=self._t("Kategoriya:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(row_kat, text=self._t("Kategoriya:")).pack(side="left", padx=(0, 8))
         cb_kategoriya = ctk.CTkComboBox(row_kat, values=[self._t(v) for v in KATEGORIYALAR],
                                          width=300, font=ctk.CTkFont(size=12))
         cb_kategoriya.set(self._t(str(rec.get('Kategoriya', '') or KATEGORIYALAR[-1])))
         cb_kategoriya.pack(side="left")
 
-        ctk.CTkLabel(action_frame, text=self._t("Xulosa:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(padx=15, pady=(5, 1), anchor="w")
+        ctk.CTkLabel(action_frame, text=self._t("Xulosa:")).pack(padx=15, pady=(5, 1), anchor="w")
         tb_natija = ctk.CTkTextbox(action_frame, height=80, wrap="word", font=ctk.CTkFont(size=12))
         natija_text = str(rec.get('Organish_Natijasi', ''))
         tb_natija.insert("1.0", self._t(natija_text) if self.is_cyrillic else natija_text)
@@ -902,14 +891,10 @@ class DashboardApp(ctk.CTk):
 
         self.attached_file_path = str(rec.get('Biriktirilgan_Fayl', '') or '')
 
-        # ===== IZOHLAR BO'LIMI =====
-        ctk.CTkLabel(action_frame, text=self._t("💬 Izohlar:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(padx=15, pady=(5, 1), anchor="w")
-
+        ctk.CTkLabel(action_frame, text=self._t("💬 Izohlar:")).pack(padx=15, pady=(5, 1), anchor="w")
         izoh_frame = ctk.CTkFrame(action_frame, fg_color="#FFFFFF", corner_radius=5,
                                   border_width=1, border_color="#CBD5E1")
         izoh_frame.pack(fill="x", padx=15, pady=(0, 6))
-
         self.izoh_container = ctk.CTkFrame(izoh_frame, fg_color="transparent")
         self.izoh_container.pack(fill="x", padx=10, pady=6)
 
@@ -936,16 +921,12 @@ class DashboardApp(ctk.CTk):
                                   wraplength=900).pack(anchor="w", padx=8, pady=(0, 4))
             except Exception as e:
                 log_error(e, "refresh_izohlar")
-                ctk.CTkLabel(self.izoh_container, text=f"⚠️ {e}",
-                             font=ctk.CTkFont(size=11), text_color="#C0392B").pack(anchor="w")
 
         refresh_izohlar()
 
-        # Izoh qo'shish
         izoh_input_frame = ctk.CTkFrame(action_frame, fg_color="transparent")
         izoh_input_frame.pack(fill="x", padx=15, pady=(0, 6))
-
-        entry_izoh = ctk.CTkEntry(izoh_input_frame, placeholder_text=self._t("Yangi izoh yozing..."),
+        entry_izoh = ctk.CTkEntry(izoh_input_frame, placeholder_text=self._t("Yangi izoh..."),
                                    font=ctk.CTkFont(size=12))
         entry_izoh.pack(side="left", fill="x", expand=True, padx=(0, 5))
 
@@ -953,30 +934,20 @@ class DashboardApp(ctk.CTk):
             text = entry_izoh.get().strip()
             if not text:
                 return
-            try:
-                ok = self.loader.db.add_izoh(m_id, text, yozgan='admin', yozgan_rol=self.role)
-                if ok:
-                    entry_izoh.delete(0, 'end')
-                    refresh_izohlar()
-                else:
-                    messagebox.showerror(self._t("Xatolik"), self._t("Izoh qo'shilmadi!"))
-            except Exception as e:
-                log_error(e, "add_izoh_ui")
-                messagebox.showerror(self._t("Xatolik"), str(e))
+            ok = self.loader.db.add_izoh(m_id, text, yozgan='admin', yozgan_rol=self.role)
+            if ok:
+                entry_izoh.delete(0, 'end')
+                refresh_izohlar()
 
-        ctk.CTkButton(izoh_input_frame, text=self._t("💬 Qo'shish"), width=110, height=28,
+        ctk.CTkButton(izoh_input_frame, text=self._t("💬"), width=60, height=28,
                       fg_color=self.t_colors["btn"], hover_color=self.t_colors["hover"],
                       font=ctk.CTkFont(size=11, weight="bold"),
                       command=add_izoh).pack(side="left")
 
-        # ===== FAYLLAR =====
-        ctk.CTkLabel(action_frame, text=self._t("📎 Fayllar:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(padx=15, pady=(5, 1), anchor="w")
-
+        ctk.CTkLabel(action_frame, text=self._t("📎 Fayllar:")).pack(padx=15, pady=(5, 1), anchor="w")
         fayllar_frame = ctk.CTkFrame(action_frame, fg_color="#FFFFFF", corner_radius=5,
                                       border_width=1, border_color="#CBD5E1")
         fayllar_frame.pack(fill="x", padx=15, pady=(0, 6))
-
         self.fayllar_container = ctk.CTkFrame(fayllar_frame, fg_color="transparent")
         self.fayllar_container.pack(fill="x", padx=10, pady=6)
 
@@ -1004,8 +975,6 @@ class DashboardApp(ctk.CTk):
                                       command=lambda fid=r['id']: self._delete_file(fid, refresh_files)).pack(side="right", padx=2)
             except Exception as e:
                 log_error(e, "refresh_files")
-                ctk.CTkLabel(self.fayllar_container, text=f"⚠️ {e}",
-                             font=ctk.CTkFont(size=11), text_color="#C0392B").pack(anchor="w")
 
         refresh_files()
 
@@ -1022,12 +991,11 @@ class DashboardApp(ctk.CTk):
                       command=lambda: self._show_history_dialog(m_id)).pack(side="left", padx=6, pady=6)
 
         if self.role == "admin":
-            ctk.CTkButton(fayllar_frame, text=self._t("📦 Arxivga"),
+            ctk.CTkButton(fayllar_frame, text=self._t("📦 Arxiv"),
                           width=120, height=28, fg_color="#7F8C8D", hover_color="#95A5A6",
                           font=ctk.CTkFont(size=11, weight="bold"),
                           command=lambda: self._archive_toggle(m_id)).pack(side="left", padx=6, pady=6)
 
-        # Saqlash
         row_save = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_save.pack(pady=(0, 10))
 
@@ -1065,7 +1033,6 @@ class DashboardApp(ctk.CTk):
             rec_upd['Ijro_Holati'] = self._to_latin(cb_status.get()) if self.is_cyrillic else cb_status.get()
             rec_upd['Chora_Turi'] = self._to_latin(cb_chora.get()) if self.is_cyrillic else cb_chora.get()
             rec_upd['Masul_Komplayens'] = self._to_latin(cb_masul_item.get()) if self.is_cyrillic else cb_masul_item.get()
-
             fp = filedialog.asksaveasfilename(defaultextension=".docx",
                                                initialfile=f"Xulosa_{m_id}.docx")
             if not fp:
@@ -1113,7 +1080,7 @@ class DashboardApp(ctk.CTk):
 
     def _archive_toggle(self, m_id):
         if not messagebox.askyesno(self._t("Tasdiqlash"),
-                                    self._t("Murojaatni arxivga qo'yilsinmi?")):
+                                    self._t("Arxivga qo'yilsinmi?")):
             return
         self.loader.db.archive_murojaat(m_id, 1)
         messagebox.showinfo(self._t("Tayyor"), self._t("Arxivga qo'yildi!"))
@@ -1209,7 +1176,6 @@ class DashboardApp(ctk.CTk):
                     self._t(r.get('Yangi chora', ''))))
         except Exception as e:
             log_error(e, "history dialog")
-            messagebox.showerror(self._t("Xatolik"), str(e))
 
     def show_add_phone_view(self):
         self._push_current_to_stack()
@@ -1224,50 +1190,37 @@ class DashboardApp(ctk.CTk):
         ctk.CTkLabel(main_box, text=self._t("📞 ISHONCH TELEFONI ORQALI QABUL"),
                      font=ctk.CTkFont(size=14, weight="bold"),
                      text_color="#0F2537").pack(pady=(20, 5))
-
         form = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
                             border_width=1, border_color="#CBD5E1")
         form.pack(fill="x", padx=100, pady=10)
-        ctk.CTkLabel(form, text=self._t("F.I.Sh:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(15, 2))
+        ctk.CTkLabel(form, text=self._t("F.I.Sh:")).pack(anchor="w", padx=20, pady=(15, 2))
         e_fish = ctk.CTkEntry(form, width=500, font=ctk.CTkFont(size=12))
         e_fish.pack(anchor="w", padx=20)
-
-        ctk.CTkLabel(form, text=self._t("Telefon:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(10, 2))
+        ctk.CTkLabel(form, text=self._t("Telefon:")).pack(anchor="w", padx=20, pady=(10, 2))
         e_tel = ctk.CTkEntry(form, width=500, font=ctk.CTkFont(size=12))
         e_tel.insert(0, "+998")
         e_tel.pack(anchor="w", padx=20)
-
         row_geo = ctk.CTkFrame(form, fg_color="transparent")
         row_geo.pack(fill="x", padx=20, pady=10)
-        ctk.CTkLabel(row_geo, text=self._t("Viloyat:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 5))
+        ctk.CTkLabel(row_geo, text=self._t("Viloyat:")).pack(side="left", padx=(0, 5))
         cb_vil = ctk.CTkComboBox(row_geo, values=[self._t(v) for v in VILOYATLAR],
                                   width=200, font=ctk.CTkFont(size=12))
         cb_vil.pack(side="left", padx=(0, 20))
-        ctk.CTkLabel(row_geo, text=self._t("Tuman:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 5))
+        ctk.CTkLabel(row_geo, text=self._t("Tuman:")).pack(side="left", padx=(0, 5))
         e_tum = ctk.CTkEntry(row_geo, width=180, font=ctk.CTkFont(size=12))
         e_tum.pack(side="left")
-
-        ctk.CTkLabel(form, text=self._t("Yo'nalish:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(10, 2))
+        ctk.CTkLabel(form, text=self._t("Yo'nalish:")).pack(anchor="w", padx=20, pady=(10, 2))
         cb_yon = ctk.CTkComboBox(form, values=[self._t(v) for v in [
             "Kadastr agentligi hududiy boshqarmasi xodimlarining xatti-harakatlari",
             "Davlat kadastrlari palatasi hududiy boshqarmasi xodimlarining xatti-harakatlari"]],
             width=500, font=ctk.CTkFont(size=12))
         cb_yon.pack(anchor="w", padx=20)
-
-        ctk.CTkLabel(form, text=self._t("Kategoriya:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(10, 2))
+        ctk.CTkLabel(form, text=self._t("Kategoriya:")).pack(anchor="w", padx=20, pady=(10, 2))
         cb_kat = ctk.CTkComboBox(form, values=[self._t(v) for v in KATEGORIYALAR],
                                   width=500, font=ctk.CTkFont(size=12))
         cb_kat.set(self._t(KATEGORIYALAR[-1]))
         cb_kat.pack(anchor="w", padx=20)
-
-        ctk.CTkLabel(form, text=self._t("Murojaat:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=20, pady=(10, 2))
+        ctk.CTkLabel(form, text=self._t("Murojaat:")).pack(anchor="w", padx=20, pady=(10, 2))
         tb_matn = ctk.CTkTextbox(form, height=120, wrap="word", font=ctk.CTkFont(size=12))
         tb_matn.pack(fill="x", padx=20, pady=(0, 15))
 
@@ -1281,7 +1234,7 @@ class DashboardApp(ctk.CTk):
             matn_xom = tb_matn.get("1.0", "end-1c").strip()
 
             if not fish_xom or not tel_val or not matn_xom:
-                messagebox.showwarning(self._t("To'ldirish shart"), self._t("Hamma maydonni to'ldiring!"))
+                messagebox.showwarning(self._t("To'ldirish shart"), self._t("Hamma maydon!"))
                 return
 
             fish_val = self._to_latin(fish_xom) if self.is_cyrillic else fish_xom
@@ -1317,16 +1270,13 @@ class DashboardApp(ctk.CTk):
         self.btn_back.configure(state="normal")
         self.lbl_path.configure(text=self._t("Asosiy oyna  /  Xodimlar"))
         self._clear_container()
-
         main_box = ctk.CTkFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
                                 border_width=1, border_color="#CBD5E1")
         main_box.pack(fill="both", expand=True, padx=4, pady=4)
-
         header = ctk.CTkFrame(main_box, fg_color="transparent")
         header.pack(fill="x", padx=15, pady=10)
         ctk.CTkLabel(header, text=self._t("👥 Xodimlar:"),
-                     font=ctk.CTkFont(size=13, weight="bold"),
-                     text_color="#0F2537").pack(side="left")
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
         ctk.CTkButton(header, text=self._t("➕ Yangi xodim"),
                       width=150, height=30, fg_color="#27AE60", hover_color="#219150",
                       font=ctk.CTkFont(size=11, weight="bold"),
@@ -1341,7 +1291,6 @@ class DashboardApp(ctk.CTk):
                         bordercolor="#94A3B8", borderwidth=1)
         style.configure("Xod.Treeview.Heading", font=("Calibri", 11, "bold"),
                         background=self.t_colors["primary"], foreground="#FFFFFF")
-
         tree = ttk.Treeview(table_frame, columns=cols, show="headings",
                             style="Xod.Treeview", selectmode="browse")
         for c, t in zip(cols, ["#", "Hudud", "Tashkilot", "F.I.Sh.", "Telefon", "Telegram"]):
@@ -1359,11 +1308,7 @@ class DashboardApp(ctk.CTk):
 
         def populate_x():
             tree.delete(*tree.get_children())
-            try:
-                df_x = self.loader.db.get_xodimlar()
-            except Exception as e:
-                log_error(e, "populate_x")
-                return
+            df_x = self.loader.db.get_xodimlar()
             for _, r in df_x.iterrows():
                 def _s(key):
                     v = r.get(key, '')
@@ -1377,9 +1322,7 @@ class DashboardApp(ctk.CTk):
         edit_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
                                   border_width=1, border_color="#CBD5E1")
         edit_frame.pack(fill="x", padx=15, pady=(0, 12))
-        ctk.CTkLabel(edit_frame, text=self._t("Tahrirlash:"),
-                     font=ctk.CTkFont(size=12, weight="bold"),
-                     text_color="#0F2537").pack(anchor="w", padx=12, pady=(6, 4))
+        ctk.CTkLabel(edit_frame, text=self._t("Tahrirlash:")).pack(anchor="w", padx=12, pady=(6, 4))
         row_inputs = ctk.CTkFrame(edit_frame, fg_color="transparent")
         row_inputs.pack(fill="x", padx=12, pady=4)
         ctk.CTkLabel(row_inputs, text=self._t("F.I.Sh:")).pack(side="left", padx=4)
@@ -1408,7 +1351,6 @@ class DashboardApp(ctk.CTk):
 
         def save_x():
             if not selected_id[0]:
-                messagebox.showwarning(self._t("Diqqat"), self._t("Tanlang!"))
                 return
             fish_v = self._to_latin(e_fish.get().strip()) if self.is_cyrillic else e_fish.get().strip()
             self.loader.db.save_xodim(selected_id[0], fish_v, e_tel.get().strip(), e_tg.get().strip())
@@ -1417,7 +1359,6 @@ class DashboardApp(ctk.CTk):
 
         def delete_x():
             if not selected_id[0]:
-                messagebox.showwarning(self._t("Diqqat"), self._t("Tanlang!"))
                 return
             if not messagebox.askyesno(self._t("Tasdiqlash"), self._t("O'chirmoqchimisiz?")):
                 return
@@ -1426,13 +1367,9 @@ class DashboardApp(ctk.CTk):
             messagebox.showinfo(self._t("O'chirildi"), self._t("O'chirildi!"))
 
         ctk.CTkButton(row_inputs, text=self._t("💾"), width=80, height=28,
-                      fg_color="#1B5E20", hover_color="#2E7D32",
-                      font=ctk.CTkFont(size=11, weight="bold"),
-                      command=save_x).pack(side="left", padx=10)
+                      fg_color="#1B5E20", command=save_x).pack(side="left", padx=10)
         ctk.CTkButton(row_inputs, text=self._t("🗑"), width=80, height=28,
-                      fg_color="#C0392B", hover_color="#A93226",
-                      font=ctk.CTkFont(size=11, weight="bold"),
-                      command=delete_x).pack(side="left", padx=4)
+                      fg_color="#C0392B", command=delete_x).pack(side="left", padx=4)
 
     def _add_xodim_dialog(self):
         win = ctk.CTkToplevel(self)
@@ -1473,16 +1410,13 @@ class DashboardApp(ctk.CTk):
             vil_val = self._to_latin(vil_xom) if self.is_cyrillic else vil_xom
             tash_val = self._to_latin(tash_xom) if self.is_cyrillic else tash_xom
             fish_val = self._to_latin(fish_xom) if self.is_cyrillic else fish_xom
-            ok = self.loader.db.add_xodim(vil_val, tash_val, fish_val, tel_val, tg_val)
-            if ok:
+            if self.loader.db.add_xodim(vil_val, tash_val, fish_val, tel_val, tg_val):
                 win.destroy()
                 self.show_xodimlar_view()
                 messagebox.showinfo(self._t("Saqlandi"), self._t("Qo'shildi!"))
 
         ctk.CTkButton(win, text=self._t("💾 Saqlash"), width=200, height=38,
-                      fg_color="#1B5E20", hover_color="#2E7D32",
-                      font=ctk.CTkFont(size=13, weight="bold"),
-                      command=save_new).pack(pady=15)
+                      fg_color="#1B5E20", command=save_new).pack(pady=15)
 
     def show_settings_view(self):
         self._push_current_to_stack()
@@ -1496,30 +1430,26 @@ class DashboardApp(ctk.CTk):
         main_box.pack(fill="both", expand=True, padx=4, pady=4)
         ctk.CTkLabel(main_box, text=self._t("⚙️ SOZLAMALAR"),
                      font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(20, 15))
-
         form = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
                             border_width=1, border_color="#CBD5E1")
         form.pack(fill="x", padx=100, pady=10)
         row_sla = ctk.CTkFrame(form, fg_color="transparent")
         row_sla.pack(fill="x", padx=20, pady=(20, 10))
-        ctk.CTkLabel(row_sla, text=self._t("SLA kun:"),
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(row_sla, text=self._t("SLA kun:")).pack(side="left", padx=(0, 10))
         e_sla = ctk.CTkEntry(row_sla, width=80)
         e_sla.insert(0, str(sets.get("sla_days", "2")))
         e_sla.pack(side="left")
-
         ctk.CTkLabel(form, text=self._t("Word sarlavhasi:")).pack(anchor="w", padx=20, pady=(15, 2))
         tb_header = ctk.CTkTextbox(form, height=60)
-        tb_header.insert("1.0", self._t(sets.get("report_header",
+        h_text = sets.get("report_header",
                           "O‘ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI\n"
-                          "KORRUPSIYAGA QARSHI KURASHISH BO‘LIMI")) if self.is_cyrillic else
-                          sets.get("report_header", ""))
+                          "KORRUPSIYAGA QARSHI KURASHISH BO‘LIMI")
+        tb_header.insert("1.0", self._t(h_text) if self.is_cyrillic else h_text)
         tb_header.pack(fill="x", padx=20)
-
         ctk.CTkLabel(form, text=self._t("Telegram shabloni:")).pack(anchor="w", padx=20, pady=(15, 2))
         tb_tg = ctk.CTkTextbox(form, height=120)
-        tb_tg.insert("1.0", self._t(sets.get("tg_template", "Murojaat #{id}\nMatn: {matn}"))
-                     if self.is_cyrillic else sets.get("tg_template", ""))
+        t_text = sets.get("tg_template", "Murojaat #{id}\nMatn: {matn}")
+        tb_tg.insert("1.0", self._t(t_text) if self.is_cyrillic else t_text)
         tb_tg.pack(fill="x", padx=20)
 
         def save_settings():
@@ -1539,9 +1469,7 @@ class DashboardApp(ctk.CTk):
             messagebox.showinfo(self._t("Saqlandi"), self._t("Saqlandi!"))
 
         ctk.CTkButton(form, text=self._t("💾 Saqlash"), height=32, width=200,
-                      fg_color="#1B5E20", hover_color="#2E7D32",
-                      font=ctk.CTkFont(size=12, weight="bold"),
-                      command=save_settings).pack(pady=15)
+                      fg_color="#1B5E20", command=save_settings).pack(pady=15)
 
         ctk.CTkLabel(main_box, text=self._t("👥 FOYDALANUVCHILAR"),
                      font=ctk.CTkFont(size=14, weight="bold")).pack(pady=(30, 10))
@@ -1554,7 +1482,6 @@ class DashboardApp(ctk.CTk):
         style.configure("Users.Treeview", rowheight=28, font=("Calibri", 11))
         style.configure("Users.Treeview.Heading", font=("Calibri", 11, "bold"),
                         background=self.t_colors["primary"], foreground="#FFFFFF")
-
         tree_u = ttk.Treeview(u_frame, columns=("id", "user", "pass", "role"),
                               show="headings", height=6, style="Users.Treeview")
         for c, t in zip(("id", "user", "pass", "role"), ("ID", "Login", "Parol", "Rol")):
@@ -1590,7 +1517,6 @@ class DashboardApp(ctk.CTk):
         cb_r = ctk.CTkComboBox(u_input, values=["admin", "kuzatuvchi"], width=120)
         cb_r.set("kuzatuvchi")
         cb_r.pack(side="left", padx=5)
-
         sel_uid = [None]
 
         def on_u_select(_event):
@@ -1611,7 +1537,6 @@ class DashboardApp(ctk.CTk):
             login = e_u.get().strip()
             password = e_p.get().strip()
             if not login or not password:
-                messagebox.showwarning(self._t("Xato"), self._t("Kiriting!"))
                 return
             if self.loader.db.add_user(login, password, cb_r.get()):
                 populate_users()
@@ -1630,10 +1555,7 @@ class DashboardApp(ctk.CTk):
             messagebox.showinfo(self._t("Saqlandi"), self._t("Yangilandi!"))
 
         def del_u():
-            if not sel_uid[0]:
-                return
-            if str(sel_uid[0]) == "1":
-                messagebox.showerror(self._t("Xato"), self._t("Admin o'chirilmaydi!"))
+            if not sel_uid[0] or str(sel_uid[0]) == "1":
                 return
             if not messagebox.askyesno(self._t("Tasdiqlash"), self._t("O'chirmoqchimisiz?")):
                 return
@@ -1649,6 +1571,102 @@ class DashboardApp(ctk.CTk):
                       fg_color="#27AE60", command=upd_u).pack(side="left", padx=5)
         ctk.CTkButton(btn_row, text=self._t("🗑"), width=80,
                       fg_color="#C0392B", command=del_u).pack(side="left", padx=5)
+
+    # ================= YANGI: STATISTIKA =================
+    def show_stats_view(self):
+        self._push_current_to_stack()
+        self.current_view_func = self.show_stats_view
+        self.btn_back.configure(state="normal")
+        self.lbl_path.configure(text=self._t("Asosiy oyna  /  Statistika"))
+        self._clear_container()
+
+        main_box = ctk.CTkScrollableFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
+                                           border_width=1, border_color="#CBD5E1")
+        main_box.pack(fill="both", expand=True, padx=4, pady=4)
+
+        ctk.CTkLabel(main_box, text=self._t("📊 KENGAYTIRILGAN STATISTIKA"),
+                     font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(15, 10))
+
+        stats = self.loader.db.get_extended_stats()
+        if not stats:
+            ctk.CTkLabel(main_box, text=self._t("Ma'lumot yo'q")).pack(pady=30)
+            return
+
+        # Asosiy kartalar
+        cards_frame = ctk.CTkFrame(main_box, fg_color="transparent")
+        cards_frame.pack(fill="x", padx=20, pady=10)
+        cards = [
+            (self._t("Bugun"), stats.get('today', 0), "#3498DB"),
+            (self._t("Haftada"), stats.get('week', 0), "#27AE60"),
+            (self._t("Oyda"), stats.get('month', 0), "#F39C12"),
+            (self._t("Jami"), stats.get('total', 0), "#8E44AD"),
+        ]
+        for i, (title, val, color) in enumerate(cards):
+            card = ctk.CTkFrame(cards_frame, fg_color=color, corner_radius=8)
+            card.grid(row=0, column=i, padx=6, sticky="nsew")
+            cards_frame.grid_columnconfigure(i, weight=1)
+            ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color="#E2E8F0").pack(pady=(12, 2))
+            ctk.CTkLabel(card, text=str(val), font=ctk.CTkFont(size=28, weight="bold"),
+                         text_color="#FFFFFF").pack(pady=(0, 12))
+
+        # Qo'shimcha ko'rsatkichlar
+        extra_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
+                                    border_width=1, border_color="#CBD5E1")
+        extra_frame.pack(fill="x", padx=20, pady=10)
+        ctk.CTkLabel(extra_frame, text=self._t("📈 Qo'shimcha ko'rsatkichlar"),
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(10, 5))
+
+        info_rows = [
+            (self._t("O'rtacha kunlik murojaatlar"), f"{stats.get('avg_daily', 0)} ta"),
+            (self._t("Eng faol oy"), f"{stats.get('top_month', '—')} ({stats.get('top_month_count', 0)} ta)"),
+        ]
+        for label, val in info_rows:
+            row = ctk.CTkFrame(extra_frame, fg_color="transparent")
+            row.pack(fill="x", padx=15, pady=3)
+            ctk.CTkLabel(row, text=label, font=ctk.CTkFont(size=12),
+                         text_color="#475569").pack(side="left")
+            ctk.CTkLabel(row, text=val, font=ctk.CTkFont(size=12, weight="bold"),
+                         text_color="#0F2537").pack(side="right")
+
+        # Statuslar
+        status_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
+                                     border_width=1, border_color="#CBD5E1")
+        status_frame.pack(fill="x", padx=20, pady=10)
+        ctk.CTkLabel(status_frame, text=self._t("📋 Holatlar bo'yicha"),
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(10, 5))
+        for status, count in stats.get('status_dist', {}).items():
+            row = ctk.CTkFrame(status_frame, fg_color="transparent")
+            row.pack(fill="x", padx=15, pady=2)
+            ctk.CTkLabel(row, text=f"• {self._t(status)}", font=ctk.CTkFont(size=11)).pack(side="left")
+            ctk.CTkLabel(row, text=f"{count} ta", font=ctk.CTkFont(size=11, weight="bold")).pack(side="right")
+
+        # Manba
+        manba_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
+                                    border_width=1, border_color="#CBD5E1")
+        manba_frame.pack(fill="x", padx=20, pady=10)
+        ctk.CTkLabel(manba_frame, text=self._t("📡 Manba bo'yicha"),
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(10, 5))
+        for manba, count in stats.get('manba_dist', {}).items():
+            row = ctk.CTkFrame(manba_frame, fg_color="transparent")
+            row.pack(fill="x", padx=15, pady=2)
+            ctk.CTkLabel(row, text=f"• {self._t(manba)}", font=ctk.CTkFont(size=11)).pack(side="left")
+            ctk.CTkLabel(row, text=f"{count} ta", font=ctk.CTkFont(size=11, weight="bold")).pack(side="right")
+
+        # Kategoriya
+        if stats.get('kategoriya_dist'):
+            kat_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
+                                      border_width=1, border_color="#CBD5E1")
+            kat_frame.pack(fill="x", padx=20, pady=10)
+            ctk.CTkLabel(kat_frame, text=self._t("🏷 Kategoriya bo'yicha"),
+                         font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=15, pady=(10, 5))
+            for kat, count in stats.get('kategoriya_dist', {}).items():
+                if not kat:
+                    continue
+                row = ctk.CTkFrame(kat_frame, fg_color="transparent")
+                row.pack(fill="x", padx=15, pady=2)
+                ctk.CTkLabel(row, text=f"• {self._t(kat)}", font=ctk.CTkFont(size=11)).pack(side="left")
+                ctk.CTkLabel(row, text=f"{count} ta", font=ctk.CTkFont(size=11, weight="bold")).pack(side="right")
 
     def show_charts_view(self):
         self._push_current_to_stack()
@@ -1688,8 +1706,8 @@ class DashboardApp(ctk.CTk):
         try:
             fig1, ax1 = plt.subplots(figsize=(10, 4), dpi=80)
             reg_counts = f_df['Viloyat'].value_counts().head(14)
-            colors = plt.cm.Blues(range(50, 250, 200 // max(1, len(reg_counts))))
-            ax1.barh(range(len(reg_counts)), reg_counts.values, color=colors)
+            colors_list = plt.cm.Blues(range(50, 250, 200 // max(1, len(reg_counts))))
+            ax1.barh(range(len(reg_counts)), reg_counts.values, color=colors_list)
             ax1.set_yticks(range(len(reg_counts)))
             ax1.set_yticklabels(reg_counts.index, fontsize=9)
             ax1.invert_yaxis()
@@ -1841,5 +1859,27 @@ class DashboardApp(ctk.CTk):
             reveal_in_file_manager(fp)
         except Exception as e:
             log_error(e, "export_word")
+            self._hide_loading()
+            messagebox.showerror(self._t("Xatolik"), str(e))
+
+    def _export_pdf(self):
+        fp = filedialog.asksaveasfilename(defaultextension=".pdf",
+                                           initialfile="Rahbariyatga_Malumotnoma.pdf")
+        if not fp:
+            return
+        sets = self.loader.db.get_settings()
+        period_val = self._t(getattr(self, 'selected_period', 'Barchasi'))
+        self._show_loading("📕 PDF...")
+        try:
+            ReportGenerator.export_pdf_report(
+                self.loader.get_kpi_stats(),
+                self.loader.filtered_df['Viloyat'].value_counts(),
+                fp, period_val,
+                self._t(sets.get("report_header", "O‘ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI")))
+            self._hide_loading()
+            messagebox.showinfo(self._t("Tayyor"), self._t("PDF saqlandi!"))
+            reveal_in_file_manager(fp)
+        except Exception as e:
+            log_error(e, "export_pdf")
             self._hide_loading()
             messagebox.showerror(self._t("Xatolik"), str(e))
