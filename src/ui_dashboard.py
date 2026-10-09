@@ -784,8 +784,8 @@ class DashboardApp(ctk.CTk):
             ms = self._to_latin(cb_masul.get())
 
             updated = self.loader.db.bulk_update_status(id_list, st, ch, ms,
-                                                         o'zgartirgan='admin',
-                                                         o'zgartirgan_rol=self.role)
+                                                         ozgartirgan='admin',
+                                                         ozgartirgan_rol=self.role)
             self.loader.refresh_data()
             win.destroy()
             messagebox.showinfo(self._t("Tayyor"),
@@ -1017,7 +1017,7 @@ class DashboardApp(ctk.CTk):
             try:
                 self.loader.db.update_murojaat_ijro(
                     m_id, st, nat, self.attached_file_path, ms, ch,
-                    o'zgartirgan='admin', o'zgartirgan_rol=self.role)
+                    ozgartirgan='admin', ozgartirgan_rol=self.role)
                 self.loader.refresh_data()
                 messagebox.showinfo(self._t("Saqlandi"), self._t(f"#{m_id} saqlandi!"))
             except Exception as e:
