@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 import urllib3
 import requests
 
+from src.logger import log, log_error, log_info, log_warning, cleanup_old_logs
+
 urllib3.disable_warnings()
 
 _orig_session_init = requests.Session.__init__
@@ -32,6 +34,7 @@ except ImportError:
 
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_MINUTES = 5
+BACKUP_KEEP_DAYS = 30
 
 
 def get_secure_credentials_path():
@@ -56,14 +59,14 @@ def migrate_credentials():
         if os.path.exists(old):
             try:
                 shutil.copy2(old, secure_path)
-                print(f"✅ credentials.json xavfsiz joyga ko'chirildi: {secure_path}")
+                log_info(f"credentials.json xavfsiz joyga ko'chirildi: {secure_path}")
                 try:
                     os.remove(old)
                 except OSError:
                     pass
                 return secure_path
-            except (OSError, shutil.SameFileError):
-                pass
+            except (OSError, shutil.SameFileError) as e:
+                log_error(e, "credentials ko'chirish")
     return secure_path
 
 
@@ -93,6 +96,8 @@ class DatabaseManager:
         self._init_db()
         self._seed_xodimlar()
         self._auto_backup()
+        self._cleanup_old_backups()
+        cleanup_old_logs(days=30)
 
         self.client = self._connect_gsheets()
         self.sheet = self._ensure_worksheet("Murojaatlar", [
@@ -108,6 +113,8 @@ class DatabaseManager:
 
         self._sync_users()
         self._sync_murojaatlar()
+        self._process_pending_queue()
+        log_info("Dastur ishga tushdi")
 
     def _seed_xodimlar(self):
         try:
@@ -117,7 +124,7 @@ class DatabaseManager:
                 count = cursor.fetchone()[0]
                 if count > 0:
                     return
-                print("📋 Xodimlar jadvali to'ldirilmoqda...")
+                log_info("Xodimlar jadvali to'ldirilmoqda...")
                 for vil in VILOYATLAR:
                     for tash in TASHKILOTLAR:
                         cursor.execute(
@@ -127,9 +134,9 @@ class DatabaseManager:
                             (vil, tash, "", "", "")
                         )
                 conn.commit()
-                print(f"✅ {len(VILOYATLAR) * len(TASHKILOTLAR)} ta xodim qo'shildi")
+                log_info(f"{len(VILOYATLAR) * len(TASHKILOTLAR)} ta xodim qo'shildi")
         except Exception as e:
-            print(f"⚠️ Xodimlarni to'ldirishda xato: {e}")
+            log_error(e, "seed_xodimlar")
 
     @staticmethod
     def hash_password(password):
@@ -170,8 +177,31 @@ class DatabaseManager:
                                       f"murojaatlar_{datetime.now().strftime('%Y_%m_%d')}.db")
                 if not os.path.exists(b_path):
                     shutil.copy2(self.db_path, b_path)
-        except Exception:
-            pass
+                    log_info(f"Backup yaratildi: {b_path}")
+        except Exception as e:
+            log_error(e, "auto_backup")
+
+    def _cleanup_old_backups(self):
+        """30 kundan eski backuplarni o'chirish."""
+        try:
+            backup_dir = os.path.join(BASE_DIR, "data", "backup")
+            if not os.path.exists(backup_dir):
+                return
+            cutoff = datetime.now().timestamp() - (BACKUP_KEEP_DAYS * 86400)
+            removed = 0
+            for f in os.listdir(backup_dir):
+                if f.endswith(".db"):
+                    fpath = os.path.join(backup_dir, f)
+                    if os.path.isfile(fpath) and os.path.getmtime(fpath) < cutoff:
+                        try:
+                            os.remove(fpath)
+                            removed += 1
+                        except OSError:
+                            pass
+            if removed:
+                log_info(f"{removed} ta eski backup o'chirildi")
+        except Exception as e:
+            log_error(e, "cleanup_backups")
 
     def _init_db(self):
         with self._get_connection() as conn:
@@ -207,7 +237,6 @@ class DatabaseManager:
                     success INTEGER DEFAULT 0
                 )
             """)
-            # Tarix jadvali (apostrofsiz ustun nomlari!)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS murojaat_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -234,6 +263,17 @@ class DatabaseManager:
                     yuklagan TEXT
                 )
             """)
+            # OFFLINE QUEUE — internet yo'q paytda o'zgarishlarni saqlash
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS pending_sync (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    action_type TEXT,
+                    murojaat_id INTEGER,
+                    payload TEXT,
+                    created_at TEXT,
+                    retry_count INTEGER DEFAULT 0
+                )
+            """)
             cursor.execute("CREATE TABLE IF NOT EXISTS sozlamalar (key TEXT PRIMARY KEY, val TEXT)")
 
             cursor.execute("SELECT COUNT(*) FROM users")
@@ -244,20 +284,22 @@ class DatabaseManager:
                                ("admin", admin_hash, "admin"))
                 cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
                                ("rahbar", rahbar_hash, "kuzatuvchi"))
-                print("✅ Standart foydalanuvchilar yaratildi")
+                log_info("Standart foydalanuvchilar yaratildi")
             conn.commit()
 
     def _connect_gsheets(self):
         if not HAS_GSHEETS or not os.path.exists(self.json_key_path):
+            log_warning("Google Sheets ulanmagan (credentials yo'q)")
             return None
         try:
             scope = ["https://www.googleapis.com/auth/spreadsheets",
                      "https://www.googleapis.com/auth/drive"]
             creds = ServiceAccountCredentials.from_json_keyfile_name(self.json_key_path, scope)
             client = gspread.authorize(creds)
+            log_info("Google Sheets ulandi")
             return client
         except Exception as e:
-            print(f"⚠️ Google Sheets ulanmadi: {e}")
+            log_error(e, "gsheets ulanish")
             return None
 
     def _ensure_worksheet(self, title, headers, cols):
@@ -273,9 +315,72 @@ class DatabaseManager:
                 sheet.insert_row(headers, 1)
             return sheet
         except Exception as e:
-            print(f"⚠️ Worksheet '{title}' yaratilmadi: {e}")
+            log_error(e, f"worksheet '{title}'")
             return None
 
+    # ================= OFFLINE QUEUE =================
+    def _add_to_pending(self, action_type, murojaat_id, payload=""):
+        """Internet yo'q paytda o'zgarishni navbatga qo'shish."""
+        try:
+            import json
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO pending_sync (action_type, murojaat_id, payload, created_at)
+                    VALUES (?, ?, ?, ?)
+                """, (action_type, murojaat_id, json.dumps(payload) if payload else "",
+                      datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+                conn.commit()
+                log_warning(f"Offline queue: {action_type} #{murojaat_id}")
+                return True
+        except Exception as e:
+            log_error(e, "add_to_pending")
+            return False
+
+    def _process_pending_queue(self):
+        """Internet qaytganda navbatni qayta ishlash."""
+        if self.client is None:
+            return
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, action_type, murojaat_id FROM pending_sync ORDER BY id ASC")
+                rows = cursor.fetchall()
+                if not rows:
+                    return
+                log_info(f"Pending queue: {len(rows)} ta amal qayta ishlanmoqda...")
+                processed = 0
+                for row in rows:
+                    pid, action, m_id = row
+                    try:
+                        if action == "update":
+                            row_data = self._get_row_by_id(m_id)
+                            if row_data and self.sheet:
+                                self._sync_single_row_to_cloud(row_data)
+                        cursor.execute("DELETE FROM pending_sync WHERE id = ?", (pid,))
+                        processed += 1
+                    except Exception as e:
+                        log_error(e, f"pending #{pid}")
+                        cursor.execute(
+                            "UPDATE pending_sync SET retry_count = retry_count + 1 WHERE id = ?",
+                            (pid,))
+                conn.commit()
+                if processed:
+                    log_info(f"Pending queue: {processed} ta amal bajarildi")
+        except Exception as e:
+            log_error(e, "process_pending")
+
+    def get_pending_count(self):
+        """Navbatda nechta o'zgarish borligini qaytaradi."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM pending_sync")
+                return cursor.fetchone()[0]
+        except Exception:
+            return 0
+
+    # ================= RATE LIMITING =================
     def _check_rate_limit(self, username):
         try:
             with self._get_connection() as conn:
@@ -302,7 +407,8 @@ class DatabaseManager:
                             pass
                     return True, LOCKOUT_MINUTES
                 return False, 0
-        except Exception:
+        except Exception as e:
+            log_error(e, "rate_limit")
             return False, 0
 
     def _log_login_attempt(self, username, success):
@@ -316,8 +422,8 @@ class DatabaseManager:
                 cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
                 cursor.execute("DELETE FROM login_attempts WHERE attempt_time < ?", (cutoff,))
                 conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            log_error(e, "log_login_attempt")
 
     def log_user_entry(self, username, role):
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -335,8 +441,9 @@ class DatabaseManager:
                     target=lambda: self.audit_sheet.append_row(
                         [str(log_id), str(username), str(role), now_str, comp_name]),
                     daemon=True).start()
-        except Exception:
-            pass
+            log_info(f"Login: {username} ({role})")
+        except Exception as e:
+            log_error(e, "log_user_entry")
 
     def check_user_login(self, username, password):
         username = str(username).strip()
@@ -344,7 +451,7 @@ class DatabaseManager:
 
         blocked, remaining = self._check_rate_limit(username)
         if blocked:
-            print(f"🚫 Login bloklangan: {username} ({remaining} daqiqa qoldi)")
+            log_warning(f"Login bloklangan: {username} ({remaining} daqiqa)")
             return None
 
         found_role = None
@@ -383,8 +490,8 @@ class DatabaseManager:
                                     (username, found_password, found_role))
                                 conn.commit()
                             break
-            except Exception:
-                pass
+            except Exception as e:
+                log_error(e, "cloud login")
 
         if found_role and found_password:
             if self.is_hashed(found_password):
@@ -405,16 +512,16 @@ class DatabaseManager:
                                 "UPDATE users SET password = ? WHERE username = ?",
                                 (new_hash, username))
                             conn.commit()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        log_error(e, "hash eski parol")
                     if self.users_sheet:
                         def _update_cloud_pwd():
                             try:
                                 cell = self.users_sheet.find(username, in_column=2)
                                 if cell:
                                     self.users_sheet.update_cell(cell.row, 3, new_hash)
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                log_error(e, "cloud pwd update")
                         threading.Thread(target=_update_cloud_pwd, daemon=True).start()
                     self._log_login_attempt(username, True)
                     self.log_user_entry(username, found_role)
@@ -447,8 +554,8 @@ class DatabaseManager:
                             cell = self.users_sheet.find(un, in_column=2)
                             if cell:
                                 self.users_sheet.update_cell(cell.row, 3, pw)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            log_error(e, "cloud user hash")
                     cursor.execute("SELECT id FROM users WHERE username = ?", (un,))
                     if not cursor.fetchone():
                         cursor.execute(
@@ -466,7 +573,7 @@ class DatabaseManager:
                 if new_cloud_rows:
                     self.users_sheet.append_rows(new_cloud_rows)
         except Exception as e:
-            print(f"⚠️ Foydalanuvchilar sinxronizatsiyasida xato: {e}")
+            log_error(e, "sync_users")
 
     def _sync_murojaatlar(self):
         if self.sheet is None:
@@ -517,7 +624,7 @@ class DatabaseManager:
                 if missing_in_cloud:
                     self.sheet.append_rows(missing_in_cloud)
         except Exception as e:
-            print(f"⚠️ Murojaatlar sinxronizatsiyasida xato: {e}")
+            log_error(e, "sync_murojaatlar")
 
     def get_all_records(self):
         with self._get_connection() as conn:
@@ -549,7 +656,6 @@ class DatabaseManager:
                              biriktirilgan_fayl='', masul_komplayens='',
                              chora_turi='Chora ko‘rilmagan',
                              ozgartirgan='', ozgartirgan_rol=''):
-        """Murojaat holatini yangilash + statuslar tarixini yozish."""
         old_data = None
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -584,16 +690,21 @@ class DatabaseManager:
                               datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                         conn.commit()
                 except Exception as e:
-                    print(f"⚠️ Tarix yozishda xato: {e}")
+                    log_error(e, "history yozish")
 
+        # Cloud sync — internet bo'lmasa, navbatga qo'shish
         row_data = self._get_row_by_id(m_id)
-        if row_data and self.sheet:
-            threading.Thread(
-                target=lambda: self._sync_single_row_to_cloud(row_data),
-                daemon=True).start()
+        if row_data:
+            if self.sheet:
+                try:
+                    self._sync_single_row_to_cloud(row_data)
+                except Exception as e:
+                    log_error(e, "cloud sync")
+                    self._add_to_pending("update", m_id)
+            else:
+                self._add_to_pending("update", m_id)
 
     def get_murojaat_history(self, m_id):
-        """Murojaat tarixini qaytaradi."""
         with self._get_connection() as conn:
             df = pd.read_sql_query("""
                 SELECT ozgartirilgan_vaqt as 'Vaqt',
@@ -619,7 +730,8 @@ class DatabaseManager:
             else:
                 self.sheet.append_row(values)
         except Exception as e:
-            print(f"⚠️ Bulutga yozishda xato: {e}")
+            log_error(e, "sync_single_row")
+            raise
 
     def insert_phone_murojaat(self, fish, telefon, viloyat, tuman, yonalish, matn,
                               masul_komplayens):
@@ -640,6 +752,7 @@ class DatabaseManager:
             threading.Thread(
                 target=lambda: self._sync_single_row_to_cloud(row_data),
                 daemon=True).start()
+        log_info(f"Yangi telefon murojaat: #{new_id}")
         return new_id
 
     def add_murojaat_fayl(self, m_id, fayl_nomi, fayl_yoli, yuklagan=''):
@@ -655,7 +768,7 @@ class DatabaseManager:
                 conn.commit()
                 return True
         except Exception as e:
-            print(f"⚠️ Fayl qo'shishda xato: {e}")
+            log_error(e, "add_fayl")
             return False
 
     def get_murojaat_fayllar(self, m_id):
@@ -684,8 +797,8 @@ class DatabaseManager:
                     cursor.execute("DELETE FROM murojaat_fayllar WHERE id = ?", (fayl_id,))
                     conn.commit()
                     return True
-        except Exception:
-            pass
+        except Exception as e:
+            log_error(e, "delete_fayl")
         return False
 
     def bulk_update_status(self, m_id_list, new_status, new_chora, new_masul,
@@ -720,7 +833,8 @@ class DatabaseManager:
                     conn.commit()
                 updated += 1
             except Exception as e:
-                print(f"⚠️ Bulk yangilash xato #{m_id}: {e}")
+                log_error(e, f"bulk #{m_id}")
+        log_info(f"Bulk yangilash: {updated} ta murojaat")
         return updated
 
     def get_trend_stats(self, days=30):
@@ -752,7 +866,7 @@ class DatabaseManager:
                 "change_pct": round(change_pct, 1),
             }
         except Exception as e:
-            print(f"⚠️ Trend hisoblashda xato: {e}")
+            log_error(e, "trend")
             return {"current": 0, "previous": 0, "change_abs": 0, "change_pct": 0}
 
     def get_settings(self):
@@ -794,7 +908,7 @@ class DatabaseManager:
                 conn.commit()
                 return True
         except Exception as e:
-            print(f"⚠️ Xodim qo'shishda xato: {e}")
+            log_error(e, "add_xodim")
             return False
 
     def delete_xodim(self, x_id):
@@ -804,7 +918,8 @@ class DatabaseManager:
                 cursor.execute("DELETE FROM xodimlar WHERE id = ?", (x_id,))
                 conn.commit()
                 return True
-        except Exception:
+        except Exception as e:
+            log_error(e, "delete_xodim")
             return False
 
     def find_xodim_for_region(self, viloyat, masul_turi=''):
@@ -836,8 +951,8 @@ class DatabaseManager:
                         'telefon': row[1] or '',
                         'username': row[2] or '',
                     }
-        except Exception:
-            pass
+        except Exception as e:
+            log_error(e, "find_xodim")
         return {}
 
     def get_all_users(self):
@@ -863,6 +978,9 @@ class DatabaseManager:
             return True
         except sqlite3.IntegrityError:
             return False
+        except Exception as e:
+            log_error(e, "add_user")
+            return False
 
     def update_user(self, user_id, username, password, role):
         try:
@@ -882,7 +1000,8 @@ class DatabaseManager:
                 conn.commit()
         except sqlite3.IntegrityError:
             return False
-        except Exception:
+        except Exception as e:
+            log_error(e, "update_user")
             return False
 
         if self.users_sheet:
@@ -894,8 +1013,8 @@ class DatabaseManager:
                         self.users_sheet.update(f"A{cell.row}:E{cell.row}", [vals])
                     else:
                         self.users_sheet.append_row(vals)
-                except Exception:
-                    pass
+                except Exception as e:
+                    log_error(e, "cloud update_user")
             threading.Thread(target=_upd_cloud, daemon=True).start()
         return True
 
@@ -914,8 +1033,8 @@ class DatabaseManager:
                         self.users_sheet.update(
                             f"A{cell.row}:E{cell.row}",
                             [[str(user_id), "DELETED", "", "", 0]])
-                except Exception:
-                    pass
+                except Exception as e:
+                    log_error(e, "cloud delete_user")
             threading.Thread(target=del_cloud, daemon=True).start()
         return True
 
@@ -930,6 +1049,7 @@ class DatabaseManager:
             raise RuntimeError("Google Sheets ulanmagan")
         self._sync_users()
         self._sync_murojaatlar()
+        self._process_pending_queue()
 
     def _sync_pull_from_cloud(self):
         return self.sync_pull_from_cloud()
