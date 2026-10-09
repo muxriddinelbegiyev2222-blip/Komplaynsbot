@@ -224,7 +224,6 @@ class DatabaseManager:
                     arxiv INTEGER DEFAULT 0
                 )
             """)
-            # Mavjud bazaga yangi ustunlar qo'shish (xavfsiz)
             for col_sql in [
                 "ALTER TABLE murojaatlar ADD COLUMN kategoriya TEXT DEFAULT ''",
                 "ALTER TABLE murojaatlar ADD COLUMN yaratgan TEXT DEFAULT ''",
@@ -272,7 +271,6 @@ class DatabaseManager:
                     yuklangan_vaqt TEXT, yuklagan TEXT
                 )
             """)
-            # YANGI: Izohlar jadvali
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS murojaat_izohlar (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -713,9 +711,7 @@ class DatabaseManager:
             else:
                 self._add_to_pending("update", m_id)
 
-    # ================= YANGI: IZOHLAR =================
     def add_izoh(self, m_id, izoh, yozgan='', yozgan_rol=''):
-        """Murojaatga izoh qo'shish."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -732,7 +728,6 @@ class DatabaseManager:
             return False
 
     def get_murojaat_izohlar(self, m_id):
-        """Murojaat izohlarini qaytaradi."""
         try:
             with self._get_connection() as conn:
                 df = pd.read_sql_query("""
@@ -748,7 +743,6 @@ class DatabaseManager:
             return pd.DataFrame()
 
     def delete_izoh(self, izoh_id):
-        """Izohni o'chirish (faqat admin)."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -759,9 +753,7 @@ class DatabaseManager:
             log_error(e, "delete_izoh")
             return False
 
-    # ================= YANGI: ARXIV =================
     def archive_murojaat(self, m_id, arxiv=1):
-        """Murojaatni arxivga qo'yish yoki qaytarish."""
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -921,6 +913,58 @@ class DatabaseManager:
         except Exception as e:
             log_error(e, "trend")
             return {"current": 0, "previous": 0, "change_abs": 0, "change_pct": 0}
+
+    # ================= YANGI: KENGAYTIRILGAN STATISTIKA =================
+    def get_extended_stats(self):
+        """Kengaytirilgan statistika — BOSQICH 7."""
+        try:
+            with self._get_connection() as conn:
+                df = pd.read_sql_query("SELECT * FROM murojaatlar WHERE id > 9", conn)
+            if df.empty:
+                return {}
+
+            df['DT'] = pd.to_datetime(df['yaratilgan_sana'], errors='coerce')
+            df = df.dropna(subset=['DT'])
+
+            now = datetime.now()
+            today = now.date()
+            week_ago = now - timedelta(days=7)
+            month_ago = now - timedelta(days=30)
+
+            total = len(df)
+            today_count = len(df[df['DT'].dt.date == today])
+            week_count = len(df[df['DT'] >= week_ago])
+            month_count = len(df[df['DT'] >= month_ago])
+
+            if total > 0:
+                days_span = (df['DT'].max() - df['DT'].min()).days or 1
+                avg_daily = round(total / days_span, 1)
+            else:
+                avg_daily = 0
+
+            status_dist = df['ijro_holati'].value_counts().to_dict()
+            manba_dist = df['manba'].value_counts().to_dict()
+            kat_dist = df['kategoriya'].value_counts().to_dict() if 'kategoriya' in df.columns else {}
+
+            if not df.empty:
+                df['month'] = df['DT'].dt.to_period('M')
+                month_counts = df.groupby('month').size()
+                top_month = str(month_counts.idxmax()) if not month_counts.empty else "—"
+                top_month_count = int(month_counts.max()) if not month_counts.empty else 0
+            else:
+                top_month = "—"
+                top_month_count = 0
+
+            return {
+                "total": total, "today": today_count, "week": week_count,
+                "month": month_count, "avg_daily": avg_daily,
+                "status_dist": status_dist, "manba_dist": manba_dist,
+                "kategoriya_dist": kat_dist,
+                "top_month": top_month, "top_month_count": top_month_count,
+            }
+        except Exception as e:
+            log_error(e, "extended_stats")
+            return {}
 
     def get_settings(self):
         with self._get_connection() as conn:
