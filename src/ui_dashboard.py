@@ -14,6 +14,11 @@ from PIL import Image, ImageDraw
 from src.report_generator import ReportGenerator
 from src.logger import log, log_error, log_info, log_warning
 
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 THEMES = {
     "Navy (Asl)": {"primary": "#0F2537", "btn": "#1E3A56", "hover": "#2A4D73"},
     "Tungi (Midnight)": {"primary": "#1E3A8A", "btn": "#2563EB", "hover": "#3B82F6"},
@@ -38,9 +43,17 @@ def _is_null(value):
         return False
 
 
+def _norm_apos(text):
+    """Apostrof belgilarini bir xil standart ko'rinishga keltirish."""
+    if text is None:
+        return ""
+    return re.sub(r"['‘’`ʻ]", "'", str(text)).strip()
+
+
 def ensure_app_logo():
-    os.makedirs("assets", exist_ok=True)
-    logo_path = os.path.join("assets", "compliance_logo.png")
+    assets_dir = os.path.join(BASE_DIR, "assets")
+    os.makedirs(assets_dir, exist_ok=True)
+    logo_path = os.path.join(assets_dir, "compliance_logo.png")
     if not os.path.exists(logo_path):
         img = Image.new("RGBA", (128, 128), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
@@ -78,8 +91,10 @@ def sanitize_phone(phone):
 LAT_TO_CYR = [
     ("SH", "Ш"), ("Sh", "Ш"), ("sH", "ш"), ("sh", "ш"),
     ("CH", "Ч"), ("Ch", "Ч"), ("cH", "ч"), ("ch", "ч"),
-    ("O'", "Ў"), ("O‘", "Ў"), ("O`", "Ў"), ("o'", "ў"), ("o‘", "ў"), ("o`", "ў"),
-    ("G'", "Ғ"), ("G‘", "Ғ"), ("G`", "Ғ"), ("g'", "ғ"), ("g‘", "ғ"), ("g`", "ғ"),
+    ("O'", "Ў"), ("O‘", "Ў"), ("O’", "Ў"), ("O`", "Ў"), ("Oʻ", "Ў"),
+    ("o'", "ў"), ("o‘", "ў"), ("o’", "ў"), ("o`", "ў"), ("oʻ", "ў"),
+    ("G'", "Ғ"), ("G‘", "Ғ"), ("G’", "Ғ"), ("G`", "Ғ"), ("Gʻ", "Ғ"),
+    ("g'", "ғ"), ("g‘", "ғ"), ("g’", "ғ"), ("g`", "ғ"), ("gʻ", "ғ"),
     ("YO", "Ё"), ("Yo", "Ё"), ("yO", "ё"), ("yo", "ё"),
     ("YU", "Ю"), ("Yu", "Ю"), ("yU", "ю"), ("yu", "ю"),
     ("YA", "Я"), ("Ya", "Я"), ("yA", "я"), ("ya", "я"),
@@ -91,10 +106,12 @@ LAT_TO_CYR = [
     ("K", "К"), ("k", "к"), ("L", "Л"), ("l", "л"), ("M", "М"), ("m", "м"),
     ("N", "Н"), ("n", "н"), ("O", "О"), ("o", "о"), ("P", "П"), ("p", "п"),
     ("Q", "Қ"), ("q", "қ"), ("R", "Р"), ("r", "р"), ("S", "С"), ("s", "с"),
-    ("T", "Т"), ("t", "т"), ("U", "У"), ("u", "у"), ("V", "В"), ("v", "в"),
+    ("T", "Т"), ("t", "т"), ("U", "У"), ("u", "у"), ("V", "В"), ("v", "v"),
     ("X", "Х"), ("x", "х"), ("Y", "Й"), ("y", "й"), ("Z", "З"), ("z", "з"),
-    ("'", "ъ"), ("‘", "ъ"), ("`", "ъ"),
+    ("'", "ъ"), ("‘", "ъ"), ("’", "ъ"), ("`", "ъ"), ("ʻ", "ъ"),
 ]
+# Fix lowercase 'v' mapping to Cyrillic 'в'
+LAT_TO_CYR = [(k, "в" if v == "v" else v) for k, v in LAT_TO_CYR]
 
 CYR_TO_LAT = [
     ("Ш", "Sh"), ("ш", "sh"), ("Ч", "Ch"), ("ч", "ch"),
@@ -134,12 +151,35 @@ KATEGORIYALAR = [
     "Boshqa",
 ]
 
+STATUSLAR = [
+    "O‘rganishga yuborilgan",
+    "O‘rganib chiqildi / Bartaraf etildi",
+    "Ijobiy hal etildi",
+    "Intizomiy chora ko‘rildi",
+    "Asossiz deb topildi",
+]
+
+CHORALAR = [
+    "Chora ko‘rilmagan",
+    "Xayfsan e'lon qilindi",
+    "Jarima qo‘llandi",
+    "Lavozimidan ozod etildi",
+    "Prokuraturaga yuborildi",
+    "Asossiz deb topildi",
+]
+
+MASULLAR = [
+    "Kadastr agentligi hududiy komplayens xodimi",
+    "Davlat kadastrlari palatasi hududiy komplayens xodimi",
+]
+
 
 class DashboardApp(ctk.CTk):
-    def __init__(self, data_loader, current_role="admin"):
+    def __init__(self, data_loader, current_role="admin", current_user="admin"):
         super().__init__()
         self.loader = data_loader
         self.role = current_role
+        self.current_user = current_user or "admin"
 
         self.current_theme = "Navy (Asl)"
         self.is_cyrillic = True
@@ -153,11 +193,12 @@ class DashboardApp(ctk.CTk):
         self._suppress_stack_push = False
         self.current_view_func = None
         self.attached_file_path = ""
+        self._tk_icon_img = None
 
         try:
             self.logo_path = ensure_app_logo()
-            icon_img = tk.PhotoImage(file=self.logo_path)
-            self.iconphoto(False, icon_img)
+            self._tk_icon_img = tk.PhotoImage(file=self.logo_path)
+            self.iconphoto(False, self._tk_icon_img)
             self._icon_photo = ctk.CTkImage(Image.open(self.logo_path), size=(32, 32))
         except (OSError, tk.TclError):
             self._icon_photo = None
@@ -189,6 +230,15 @@ class DashboardApp(ctk.CTk):
         for rus, eng in CYR_TO_LAT:
             text = text.replace(rus, eng)
         return text
+
+    def _resolve_option(self, chosen_text, canonical_list):
+        """Tanlangan (kirill yoki lotin) qiymatni aniq ro'yxatdagi asl qiymatga moslashtirish."""
+        if not chosen_text:
+            return chosen_text
+        for item in canonical_list:
+            if self._t(item) == chosen_text or _norm_apos(item) == _norm_apos(self._to_latin(chosen_text)):
+                return item
+        return self._to_latin(chosen_text)
 
     def _show_loading(self, message="⏳ Yuklanmoqda..."):
         try:
@@ -360,6 +410,11 @@ class DashboardApp(ctk.CTk):
             messagebox.showerror(self._t("Xatolik"), str(e))
 
     def _clear_container(self):
+        try:
+            self.unbind("<Control-s>")
+            self.unbind("<Control-S>")
+        except Exception:
+            pass
         for widget in self.container.winfo_children():
             widget.destroy()
 
@@ -414,8 +469,9 @@ class DashboardApp(ctk.CTk):
 
         ctk.CTkLabel(filter_box, text=self._t("📡"), font=ctk.CTkFont(size=11, weight="bold"),
                      text_color="#0F2537").pack(side="left", padx=(6, 2), pady=7)
+        manba_options = ["Barchasi", "Telegram bot", "Ishonch telefoni (+998-71-273-19-66)"]
         self.cb_manba = ctk.CTkComboBox(filter_box,
-                                         values=[self._t(v) for v in ["Barchasi", "Telegram bot", "Ishonch telefoni (+998-71-273-19-66)"]],
+                                         values=[self._t(v) for v in manba_options],
                                          command=self._apply_filters, width=200, font=ctk.CTkFont(size=11))
         self.cb_manba.set(self._t(getattr(self, 'selected_manba', 'Barchasi')))
         self.cb_manba.pack(side="left", padx=2, pady=7)
@@ -442,26 +498,28 @@ class DashboardApp(ctk.CTk):
         stats = self.loader.get_kpi_stats()
         f_df = self.loader.filtered_df
 
+        org_regex = r"O['‘’`ʻ]?rganishga yuborilgan|O['‘’`ʻ]?rganishda|O['‘’`ʻ]?rganilmoqda"
+        hal_regex = r"Bartaraf etildi|Ijobiy hal etildi|Bajarildi|Intizomiy chora|O['‘’`ʻ]?rganib chiqildi|Asossiz"
+
         cards = [
             (self._t("JAMI"), stats['total'], self.t_colors["primary"],
              lambda: self.show_records_view(self._t("Barcha"), f_df)),
             (self._t("AGENTLIKDA"), stats['agentlik_organish'], "#1B4D7E",
              lambda: self.show_records_view(self._t("Agentlikda"),
-                 f_df[f_df['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)
-                      & f_df['Masul_Komplayens'].astype(str).str.contains("agentligi", case=False, na=False)])),
+                 f_df[f_df['Ijro_Holati'].astype(str).str.contains(org_regex, case=False, na=False, regex=True)
+                      & f_df['Masul_Komplayens'].astype(str).str.contains("agentligi", case=False, na=False)] if not f_df.empty else f_df)),
             (self._t("PALATADA"), stats['palata_organish'], "#4B3869",
              lambda: self.show_records_view(self._t("Palatada"),
-                 f_df[f_df['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)
-                      & f_df['Masul_Komplayens'].astype(str).str.contains("palata", case=False, na=False)])),
+                 f_df[f_df['Ijro_Holati'].astype(str).str.contains(org_regex, case=False, na=False, regex=True)
+                      & f_df['Masul_Komplayens'].astype(str).str.contains("palata", case=False, na=False)] if not f_df.empty else f_df)),
             (self._t("O‘RGANILGAN"), stats['natija_kiritilgan'], "#1B5E20",
              lambda: self.show_records_view(self._t("O'rganilgan"),
-                 f_df[f_df['Ijro_Holati'].astype(str).str.contains(
-                     "Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora|O‘rganib chiqildi|Asossiz", case=False, na=False)
-                     | f_df['Chora_Turi'].astype(str).str.contains("Asossiz", case=False, na=False)])),
+                 f_df[f_df['Ijro_Holati'].astype(str).str.contains(hal_regex, case=False, na=False, regex=True)
+                      | f_df['Chora_Turi'].astype(str).str.contains("Asossiz", case=False, na=False)] if not f_df.empty else f_df)),
             (self._t("ASOSSIZ"), stats['asossiz'], "#7F8C8D",
              lambda: self.show_records_view(self._t("Asossiz"),
                  f_df[f_df['Ijro_Holati'].astype(str).str.contains("Asossiz", case=False, na=False)
-                      | f_df['Chora_Turi'].astype(str).str.contains("Asossiz", case=False, na=False)])),
+                      | f_df['Chora_Turi'].astype(str).str.contains("Asossiz", case=False, na=False)] if not f_df.empty else f_df)),
         ]
 
         for i, (title, val, color, cmd) in enumerate(cards):
@@ -519,37 +577,39 @@ class DashboardApp(ctk.CTk):
         self.dash_tree.tag_configure('odd', background='#F1F5F9')
         self.dash_tree.tag_configure('even', background='#FFFFFF')
 
-        reg_groups = f_df.groupby('Viloyat') if not f_df.empty else []
+        reg_map = {}
+        reg_groups = f_df.groupby('Viloyat') if (not f_df.empty and 'Viloyat' in f_df.columns) else []
         for idx, (reg, group) in enumerate(reg_groups):
             c_tot = len(group)
             c_tg = len(group[group['Manba'].astype(str).str.contains('Telegram', case=False, na=False)])
             c_tel = len(group[group['Manba'].astype(str).str.contains('Telefon|273-19-66', case=False, na=False)])
-            is_org = group['Ijro_Holati'].astype(str).str.contains("O‘rganishga yuborilgan|O'rganishda", case=False, na=False)
+            is_org = group['Ijro_Holati'].astype(str).str.contains(org_regex, case=False, na=False, regex=True)
             c_ag = len(group[is_org & group['Masul_Komplayens'].astype(str).str.contains("agentligi", case=False, na=False)])
             c_pa = len(group[is_org & group['Masul_Komplayens'].astype(str).str.contains("palata", case=False, na=False)])
-            c_hal = len(group[group['Ijro_Holati'].astype(str).str.contains(
-                "Bartaraf etildi|Ijobiy hal etildi|Intizomiy chora|O‘rganib chiqildi|Asossiz", case=False, na=False)
-                | group['Chora_Turi'].astype(str).str.contains("Asossiz", case=False, na=False)])
+            c_hal = len(group[group['Ijro_Holati'].astype(str).str.contains(hal_regex, case=False, na=False, regex=True)
+                              | group['Chora_Turi'].astype(str).str.contains("Asossiz", case=False, na=False)])
             c_as = len(group[group['Ijro_Holati'].astype(str).str.contains("Asossiz", case=False, na=False)
-                            | group['Chora_Turi'].astype(str).str.contains("Asossiz", case=False, na=False)])
+                             | group['Chora_Turi'].astype(str).str.contains("Asossiz", case=False, na=False)])
             tag = 'even' if idx % 2 == 0 else 'odd'
-            self.dash_tree.insert("", "end", values=(
+            iid = self.dash_tree.insert("", "end", values=(
                 self._t(reg), self._t(f"{c_tot}"), self._t(f"{c_tg}"),
                 self._t(f"{c_tel}"), self._t(f"{c_ag}"), self._t(f"{c_pa}"),
                 self._t(f"{c_hal}"), self._t(f"{c_as}")), tags=(tag,))
+            reg_map[iid] = reg
 
         def on_region_double_click(_event):
             selected = self.dash_tree.selection()
             if not selected:
                 return
-            reg_name_translated = self.dash_tree.item(selected[0], 'values')[0]
-            reg_name = self._to_latin(reg_name_translated.replace(self._t(" ta"), "").strip())
-            df_to_show = f_df[f_df['Viloyat'] == reg_name]
+            reg_name = reg_map.get(selected[0])
+            if not reg_name:
+                reg_name_translated = self.dash_tree.item(selected[0], 'values')[0]
+                reg_name = self._resolve_option(reg_name_translated, VILOYATLAR)
+            df_to_show = f_df[f_df['Viloyat'].apply(_norm_apos) == _norm_apos(reg_name)]
             self.show_records_view(self._t(f"{reg_name}"), df_to_show)
 
         self.dash_tree.bind("<Double-1>", on_region_double_click)
 
-        # Trend
         trend = self.loader.db.get_trend_stats(days=30)
         trend_card = ctk.CTkFrame(self.container, fg_color="#FFFFFF", corner_radius=6,
                                   border_width=1, border_color="#CBD5E1")
@@ -563,8 +623,10 @@ class DashboardApp(ctk.CTk):
                      text_color=color).pack(anchor="w", padx=12, pady=8)
 
     def _apply_filters(self, _=None):
-        self.selected_period = self._to_latin(self.cb_period.get())
-        self.selected_manba = self._to_latin(self.cb_manba.get())
+        period_options = self.loader.get_available_periods()
+        manba_options = ["Barchasi", "Telegram bot", "Ishonch telefoni (+998-71-273-19-66)"]
+        self.selected_period = self._resolve_option(self.cb_period.get(), period_options)
+        self.selected_manba = self._resolve_option(self.cb_manba.get(), manba_options)
         search_q = self._to_latin(self.entry_dash_search.get().strip())
         self.loader.filter_data(period=self.selected_period, masul='Barchasi',
                                  manba=self.selected_manba, search_query=search_q)
@@ -656,8 +718,10 @@ class DashboardApp(ctk.CTk):
 
         def populate(df_to_show):
             tree.delete(*tree.get_children())
+            if df_to_show is None or df_to_show.empty:
+                return
             for idx, (_, r) in enumerate(df_to_show.iterrows()):
-                is_danger = r.get('Yuqori_Xavf', False)
+                is_danger = bool(r.get('Yuqori_Xavf', False))
                 tag = 'danger' if is_danger else ('even' if idx % 2 == 0 else 'odd')
                 tree.insert("", "end", values=(
                     r.get('#', ''),
@@ -674,12 +738,12 @@ class DashboardApp(ctk.CTk):
 
         def on_search(_event):
             q = self._to_latin(entry_search.get().lower().strip())
-            if not q:
+            if not q or data_df.empty:
                 populate(data_df)
                 return
-            mask = (data_df['F.I.Sh.'].astype(str).str.lower().str.contains(q)
-                    | data_df['Telefon'].astype(str).str.lower().str.contains(q)
-                    | data_df['Viloyat'].astype(str).str.lower().str.contains(q))
+            mask = (data_df['F.I.Sh.'].astype(str).str.lower().str.contains(q, regex=False, na=False)
+                    | data_df['Telefon'].astype(str).str.lower().str.contains(q, regex=False, na=False)
+                    | data_df['Viloyat'].astype(str).str.lower().str.contains(q, regex=False, na=False))
             populate(data_df[mask])
 
         entry_search.bind("<KeyRelease>", on_search)
@@ -708,32 +772,26 @@ class DashboardApp(ctk.CTk):
                      font=ctk.CTkFont(size=11, slant="italic")).pack(pady=(0, 5))
         tb_ids = ctk.CTkTextbox(win, height=120, font=ctk.CTkFont(size=12))
         tb_ids.pack(fill="x", padx=20, pady=5)
-        all_ids = "\n".join([str(x) for x in data_df['#'].head(10).tolist()])
+        all_ids = "\n".join([str(x) for x in data_df['#'].head(10).tolist()]) if not data_df.empty else ""
         tb_ids.insert("1.0", all_ids)
 
         form = ctk.CTkFrame(win, fg_color="#F8FAFC", corner_radius=6,
                             border_width=1, border_color="#CBD5E1")
         form.pack(fill="x", padx=20, pady=10)
         ctk.CTkLabel(form, text=self._t("Holat:")).pack(anchor="w", padx=15, pady=(10, 2))
-        cb_status = ctk.CTkComboBox(form, values=[self._t(v) for v in [
-            "O‘rganishga yuborilgan", "O‘rganib chiqildi / Bartaraf etildi",
-            "Ijobiy hal etildi", "Intizomiy chora ko‘rildi", "Asossiz deb topildi"]],
-            width=400, font=ctk.CTkFont(size=12))
-        cb_status.set(self._t("O‘rganib chiqildi / Bartaraf etildi"))
+        cb_status = ctk.CTkComboBox(form, values=[self._t(v) for v in STATUSLAR],
+                                     width=400, font=ctk.CTkFont(size=12))
+        cb_status.set(self._t(STATUSLAR[1]))
         cb_status.pack(anchor="w", padx=15)
         ctk.CTkLabel(form, text=self._t("Chora:")).pack(anchor="w", padx=15, pady=(10, 2))
-        cb_chora = ctk.CTkComboBox(form, values=[self._t(v) for v in [
-            "Chora ko‘rilmagan", "Xayfsan e'lon qilindi", "Jarima qo‘llandi",
-            "Lavozimidan ozod etildi", "Prokuraturaga yuborildi", "Asossiz deb topildi"]],
-            width=400, font=ctk.CTkFont(size=12))
-        cb_chora.set(self._t("Chora ko‘rilmagan"))
+        cb_chora = ctk.CTkComboBox(form, values=[self._t(v) for v in CHORALAR],
+                                    width=400, font=ctk.CTkFont(size=12))
+        cb_chora.set(self._t(CHORALAR[0]))
         cb_chora.pack(anchor="w", padx=15)
         ctk.CTkLabel(form, text=self._t("Mas'ul:")).pack(anchor="w", padx=15, pady=(10, 2))
-        cb_masul = ctk.CTkComboBox(form, values=[self._t(v) for v in [
-            "Kadastr agentligi hududiy komplayens xodimi",
-            "Davlat kadastrlari palatasi hududiy komplayens xodimi"]],
-            width=400, font=ctk.CTkFont(size=12))
-        cb_masul.set(self._t("Kadastr agentligi hududiy komplayens xodimi"))
+        cb_masul = ctk.CTkComboBox(form, values=[self._t(v) for v in MASULLAR],
+                                    width=400, font=ctk.CTkFont(size=12))
+        cb_masul.set(self._t(MASULLAR[0]))
         cb_masul.pack(anchor="w", padx=15, pady=(0, 15))
 
         def apply_bulk():
@@ -751,11 +809,11 @@ class DashboardApp(ctk.CTk):
             if not messagebox.askyesno(self._t("Tasdiqlash"),
                                        self._t(f"{len(id_list)} ta yangilansinmi?")):
                 return
-            st = self._to_latin(cb_status.get())
-            ch = self._to_latin(cb_chora.get())
-            ms = self._to_latin(cb_masul.get())
+            st = self._resolve_option(cb_status.get(), STATUSLAR)
+            ch = self._resolve_option(cb_chora.get(), CHORALAR)
+            ms = self._resolve_option(cb_masul.get(), MASULLAR)
             updated = self.loader.db.bulk_update_status(id_list, st, ch, ms,
-                                                         ozgartirgan='admin',
+                                                         ozgartirgan=self.current_user,
                                                          ozgartirgan_rol=self.role)
             self.loader.refresh_data()
             win.destroy()
@@ -815,19 +873,16 @@ class DashboardApp(ctk.CTk):
         row_masul = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_masul.pack(fill="x", padx=15, pady=3)
         ctk.CTkLabel(row_masul, text=self._t("Mas'ul:")).pack(side="left", padx=(0, 8))
-        cb_masul_item = ctk.CTkComboBox(row_masul, values=[self._t(v) for v in [
-            "Kadastr agentligi hududiy komplayens xodimi",
-            "Davlat kadastrlari palatasi hududiy komplayens xodimi"]],
-            width=300, font=ctk.CTkFont(size=12))
+        cb_masul_item = ctk.CTkComboBox(row_masul, values=[self._t(v) for v in MASULLAR],
+                                         width=300, font=ctk.CTkFont(size=12))
         cb_masul_item.set(self._t(
-            "Davlat kadastrlari palatasi hududiy komplayens xodimi"
-            if 'palata' in str(rec.get('Masul_Komplayens', '')).lower()
-            else "Kadastr agentligi hududiy komplayens xodimi"))
+            MASULLAR[1] if 'palata' in str(rec.get('Masul_Komplayens', '')).lower() else MASULLAR[0]
+        ))
         cb_masul_item.pack(side="left")
 
         def send_to_telegram():
             x_info = self.loader.db.find_xodim_for_region(
-                rec.get('Viloyat'), self._to_latin(cb_masul_item.get()))
+                rec.get('Viloyat'), self._resolve_option(cb_masul_item.get(), MASULLAR))
             raw_matn = str(rec.get('Murojaat matni', ''))
             short_matn = raw_matn if len(raw_matn) < 600 else raw_matn[:600] + "..."
             tmpl = sets.get("tg_template", "Murojaat #{id}\nMatn: {matn}")
@@ -861,18 +916,14 @@ class DashboardApp(ctk.CTk):
         row_status = ctk.CTkFrame(action_frame, fg_color="transparent")
         row_status.pack(fill="x", padx=15, pady=3)
         ctk.CTkLabel(row_status, text=self._t("Holat:")).pack(side="left", padx=(0, 8))
-        cb_status = ctk.CTkComboBox(row_status, values=[self._t(v) for v in [
-            "O‘rganishga yuborilgan", "O‘rganib chiqildi / Bartaraf etildi",
-            "Ijobiy hal etildi", "Intizomiy chora ko‘rildi", "Asossiz deb topildi"]],
-            width=230, font=ctk.CTkFont(size=12))
-        cb_status.set(self._t(str(rec.get('Ijro_Holati', 'O‘rganishga yuborilgan'))))
+        cb_status = ctk.CTkComboBox(row_status, values=[self._t(v) for v in STATUSLAR],
+                                     width=230, font=ctk.CTkFont(size=12))
+        cb_status.set(self._t(str(rec.get('Ijro_Holati', STATUSLAR[0]))))
         cb_status.pack(side="left", padx=(0, 15))
         ctk.CTkLabel(row_status, text=self._t("Chora:")).pack(side="left", padx=(0, 8))
-        cb_chora = ctk.CTkComboBox(row_status, values=[self._t(v) for v in [
-            "Chora ko‘rilmagan", "Xayfsan e'lon qilindi", "Jarima qo‘llandi",
-            "Lavozimidan ozod etildi", "Prokuraturaga yuborildi", "Asossiz deb topildi"]],
-            width=190, font=ctk.CTkFont(size=12))
-        cb_chora.set(self._t(str(rec.get('Chora_Turi', 'Chora ko‘rilmagan'))))
+        cb_chora = ctk.CTkComboBox(row_status, values=[self._t(v) for v in CHORALAR],
+                                    width=190, font=ctk.CTkFont(size=12))
+        cb_chora.set(self._t(str(rec.get('Chora_Turi', CHORALAR[0]))))
         cb_chora.pack(side="left")
 
         row_kat = ctk.CTkFrame(action_frame, fg_color="transparent")
@@ -934,7 +985,7 @@ class DashboardApp(ctk.CTk):
             text = entry_izoh.get().strip()
             if not text:
                 return
-            ok = self.loader.db.add_izoh(m_id, text, yozgan='admin', yozgan_rol=self.role)
+            ok = self.loader.db.add_izoh(m_id, text, yozgan=self.current_user, yozgan_rol=self.role)
             if ok:
                 entry_izoh.delete(0, 'end')
                 refresh_izohlar()
@@ -1000,16 +1051,17 @@ class DashboardApp(ctk.CTk):
         row_save.pack(pady=(0, 10))
 
         def save_changes():
-            st = self._to_latin(cb_status.get())
-            ms = self._to_latin(cb_masul_item.get())
-            ch = self._to_latin(cb_chora.get())
-            kat = self._to_latin(cb_kategoriya.get())
+            if self.role == "kuzatuvchi" or not cb_status.winfo_exists():
+                return
+            st = self._resolve_option(cb_status.get(), STATUSLAR)
+            ms = self._resolve_option(cb_masul_item.get(), MASULLAR)
+            ch = self._resolve_option(cb_chora.get(), CHORALAR)
+            kat = self._resolve_option(cb_kategoriya.get(), KATEGORIYALAR)
             nat_xom = tb_natija.get("1.0", "end-1c")
             nat = self._to_latin(nat_xom) if self.is_cyrillic else nat_xom
 
-            if (st in ["Ijobiy hal etildi", "Intizomiy chora ko‘rildi",
-                       "Asossiz deb topildi", "O‘rganib chiqildi / Bartaraf etildi"]
-                    or ch == "Asossiz deb topildi"):
+            closed_statuses = [_norm_apos(s) for s in STATUSLAR[1:]]
+            if _norm_apos(st) in closed_statuses or _norm_apos(ch) == _norm_apos("Asossiz deb topildi"):
                 df_f = self.loader.db.get_murojaat_fayllar(m_id)
                 if df_f.empty and not (self.attached_file_path and os.path.exists(self.attached_file_path)):
                     messagebox.showwarning(self._t("Fayl yo'q!"),
@@ -1019,7 +1071,7 @@ class DashboardApp(ctk.CTk):
             try:
                 self.loader.db.update_murojaat_ijro(
                     m_id, st, nat, self.attached_file_path, ms, ch,
-                    kategoriya=kat, ozgartirgan='admin', ozgartirgan_rol=self.role)
+                    kategoriya=kat, ozgartirgan=self.current_user, ozgartirgan_rol=self.role)
                 self.loader.refresh_data()
                 messagebox.showinfo(self._t("Saqlandi"), self._t(f"#{m_id} saqlandi!"))
             except Exception as e:
@@ -1030,9 +1082,9 @@ class DashboardApp(ctk.CTk):
             rec_upd = self.loader.df[self.loader.df['#'] == m_id].iloc[0].copy()
             nat_xom = tb_natija.get("1.0", "end-1c").strip()
             rec_upd['Organish_Natijasi'] = self._to_latin(nat_xom) if self.is_cyrillic else nat_xom
-            rec_upd['Ijro_Holati'] = self._to_latin(cb_status.get()) if self.is_cyrillic else cb_status.get()
-            rec_upd['Chora_Turi'] = self._to_latin(cb_chora.get()) if self.is_cyrillic else cb_chora.get()
-            rec_upd['Masul_Komplayens'] = self._to_latin(cb_masul_item.get()) if self.is_cyrillic else cb_masul_item.get()
+            rec_upd['Ijro_Holati'] = self._resolve_option(cb_status.get(), STATUSLAR)
+            rec_upd['Chora_Turi'] = self._resolve_option(cb_chora.get(), CHORALAR)
+            rec_upd['Masul_Komplayens'] = self._resolve_option(cb_masul_item.get(), MASULLAR)
             fp = filedialog.asksaveasfilename(defaultextension=".docx",
                                                initialfile=f"Xulosa_{m_id}.docx")
             if not fp:
@@ -1083,6 +1135,7 @@ class DashboardApp(ctk.CTk):
                                     self._t("Arxivga qo'yilsinmi?")):
             return
         self.loader.db.archive_murojaat(m_id, 1)
+        self.loader.refresh_data()
         messagebox.showinfo(self._t("Tayyor"), self._t("Arxivga qo'yildi!"))
         self._go_back()
 
@@ -1093,7 +1146,7 @@ class DashboardApp(ctk.CTk):
         if not fp:
             return
         try:
-            attach_dir = os.path.join(os.getcwd(), "data", "attachments", str(m_id))
+            attach_dir = os.path.join(BASE_DIR, "data", "attachments", str(m_id))
             try:
                 os.makedirs(attach_dir, exist_ok=True)
             except PermissionError:
@@ -1108,7 +1161,7 @@ class DashboardApp(ctk.CTk):
                 dest = os.path.join(attach_dir, f"{name}_{counter}{ext}")
                 counter += 1
             shutil.copy2(fp, dest)
-            self.loader.db.add_murojaat_fayl(m_id, os.path.basename(dest), dest, 'admin')
+            self.loader.db.add_murojaat_fayl(m_id, os.path.basename(dest), dest, self.current_user)
             if refresh_callback:
                 refresh_callback()
             messagebox.showinfo(self._t("Tayyor"), self._t("Fayl qo'shildi!"))
@@ -1210,10 +1263,12 @@ class DashboardApp(ctk.CTk):
         e_tum = ctk.CTkEntry(row_geo, width=180, font=ctk.CTkFont(size=12))
         e_tum.pack(side="left")
         ctk.CTkLabel(form, text=self._t("Yo'nalish:")).pack(anchor="w", padx=20, pady=(10, 2))
-        cb_yon = ctk.CTkComboBox(form, values=[self._t(v) for v in [
+        yonalish_opts = [
             "Kadastr agentligi hududiy boshqarmasi xodimlarining xatti-harakatlari",
-            "Davlat kadastrlari palatasi hududiy boshqarmasi xodimlarining xatti-harakatlari"]],
-            width=500, font=ctk.CTkFont(size=12))
+            "Davlat kadastrlari palatasi hududiy boshqarmasi xodimlarining xatti-harakatlari"
+        ]
+        cb_yon = ctk.CTkComboBox(form, values=[self._t(v) for v in yonalish_opts],
+                                  width=500, font=ctk.CTkFont(size=12))
         cb_yon.pack(anchor="w", padx=20)
         ctk.CTkLabel(form, text=self._t("Kategoriya:")).pack(anchor="w", padx=20, pady=(10, 2))
         cb_kat = ctk.CTkComboBox(form, values=[self._t(v) for v in KATEGORIYALAR],
@@ -1227,10 +1282,7 @@ class DashboardApp(ctk.CTk):
         def save_phone_entry():
             fish_xom = e_fish.get().strip()
             tel_val = e_tel.get().strip()
-            vil_xom = cb_vil.get()
             tum_xom = e_tum.get().strip()
-            yon_xom = cb_yon.get()
-            kat_xom = cb_kat.get()
             matn_xom = tb_matn.get("1.0", "end-1c").strip()
 
             if not fish_xom or not tel_val or not matn_xom:
@@ -1238,20 +1290,18 @@ class DashboardApp(ctk.CTk):
                 return
 
             fish_val = self._to_latin(fish_xom) if self.is_cyrillic else fish_xom
-            vil_val = self._to_latin(vil_xom) if self.is_cyrillic else vil_xom
+            vil_val = self._resolve_option(cb_vil.get(), VILOYATLAR)
             tum_val = self._to_latin(tum_xom) if self.is_cyrillic else tum_xom
-            yon_val = self._to_latin(yon_xom) if self.is_cyrillic else yon_xom
-            kat_val = self._to_latin(kat_xom) if self.is_cyrillic else kat_xom
+            yon_val = self._resolve_option(cb_yon.get(), yonalish_opts)
+            kat_val = self._resolve_option(cb_kat.get(), KATEGORIYALAR)
             matn_val = self._to_latin(matn_xom) if self.is_cyrillic else matn_xom
 
-            masul = ("Davlat kadastrlari palatasi hududiy komplayens xodimi"
-                     if "palata" in yon_val.lower()
-                     else "Kadastr agentligi hududiy komplayens xodimi")
+            masul = (MASULLAR[1] if "palata" in yon_val.lower() else MASULLAR[0])
 
             try:
                 new_id = self.loader.db.insert_phone_murojaat(
                     fish_val, tel_val, vil_val, tum_val, yon_val, matn_val, masul,
-                    kategoriya=kat_val, yaratgan='admin')
+                    kategoriya=kat_val, yaratgan=self.current_user)
                 self.loader.refresh_data()
                 self._redraw_entire_ui()
                 messagebox.showinfo(self._t("Qabul qilindi"), self._t(f"#{new_id} ro'yxatga olindi!"))
@@ -1399,16 +1449,14 @@ class DashboardApp(ctk.CTk):
         e_tg.pack(anchor="w", padx=20)
 
         def save_new():
-            vil_xom = cb_vil.get()
-            tash_xom = cb_tash.get()
             fish_xom = e_fish.get().strip()
             tel_val = e_tel.get().strip()
             tg_val = e_tg.get().strip()
             if not fish_xom or not tel_val:
                 messagebox.showwarning(self._t("To'ldirish shart"), self._t("F.I.Sh va Tel shart!"))
                 return
-            vil_val = self._to_latin(vil_xom) if self.is_cyrillic else vil_xom
-            tash_val = self._to_latin(tash_xom) if self.is_cyrillic else tash_xom
+            vil_val = self._resolve_option(cb_vil.get(), VILOYATLAR)
+            tash_val = self._resolve_option(cb_tash.get(), TASHKILOTLAR)
             fish_val = self._to_latin(fish_xom) if self.is_cyrillic else fish_xom
             if self.loader.db.add_xodim(vil_val, tash_val, fish_val, tel_val, tg_val):
                 win.destroy()
@@ -1572,7 +1620,6 @@ class DashboardApp(ctk.CTk):
         ctk.CTkButton(btn_row, text=self._t("🗑"), width=80,
                       fg_color="#C0392B", command=del_u).pack(side="left", padx=5)
 
-    # ================= YANGI: STATISTIKA =================
     def show_stats_view(self):
         self._push_current_to_stack()
         self.current_view_func = self.show_stats_view
@@ -1592,7 +1639,6 @@ class DashboardApp(ctk.CTk):
             ctk.CTkLabel(main_box, text=self._t("Ma'lumot yo'q")).pack(pady=30)
             return
 
-        # Asosiy kartalar
         cards_frame = ctk.CTkFrame(main_box, fg_color="transparent")
         cards_frame.pack(fill="x", padx=20, pady=10)
         cards = [
@@ -1610,7 +1656,6 @@ class DashboardApp(ctk.CTk):
             ctk.CTkLabel(card, text=str(val), font=ctk.CTkFont(size=28, weight="bold"),
                          text_color="#FFFFFF").pack(pady=(0, 12))
 
-        # Qo'shimcha ko'rsatkichlar
         extra_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
                                     border_width=1, border_color="#CBD5E1")
         extra_frame.pack(fill="x", padx=20, pady=10)
@@ -1629,7 +1674,6 @@ class DashboardApp(ctk.CTk):
             ctk.CTkLabel(row, text=val, font=ctk.CTkFont(size=12, weight="bold"),
                          text_color="#0F2537").pack(side="right")
 
-        # Statuslar
         status_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
                                      border_width=1, border_color="#CBD5E1")
         status_frame.pack(fill="x", padx=20, pady=10)
@@ -1641,7 +1685,6 @@ class DashboardApp(ctk.CTk):
             ctk.CTkLabel(row, text=f"• {self._t(status)}", font=ctk.CTkFont(size=11)).pack(side="left")
             ctk.CTkLabel(row, text=f"{count} ta", font=ctk.CTkFont(size=11, weight="bold")).pack(side="right")
 
-        # Manba
         manba_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
                                     border_width=1, border_color="#CBD5E1")
         manba_frame.pack(fill="x", padx=20, pady=10)
@@ -1653,7 +1696,6 @@ class DashboardApp(ctk.CTk):
             ctk.CTkLabel(row, text=f"• {self._t(manba)}", font=ctk.CTkFont(size=11)).pack(side="left")
             ctk.CTkLabel(row, text=f"{count} ta", font=ctk.CTkFont(size=11, weight="bold")).pack(side="right")
 
-        # Kategoriya
         if stats.get('kategoriya_dist'):
             kat_frame = ctk.CTkFrame(main_box, fg_color="#F8FAFC", corner_radius=6,
                                       border_width=1, border_color="#CBD5E1")
@@ -1729,9 +1771,9 @@ class DashboardApp(ctk.CTk):
             fig2, ax2 = plt.subplots(figsize=(7, 5), dpi=80)
             status_counts = f_df['Ijro_Holati'].value_counts().head(6)
             colors2 = ['#3498DB', '#27AE60', '#E74C3C', '#F39C12', '#9B59B6', '#7F8C8D']
-            wedges, texts, autotexts = ax2.pie(status_counts.values, labels=None,
-                                                 autopct='%1.1f%%',
-                                                 colors=colors2[:len(status_counts)], startangle=90)
+            wedges, _texts, _autotexts = ax2.pie(status_counts.values, labels=None,
+                                                  autopct='%1.1f%%',
+                                                  colors=colors2[:len(status_counts)], startangle=90)
             ax2.legend(wedges, [s[:30] for s in status_counts.index],
                        loc="center left", bbox_to_anchor=(1, 0, 0.5, 1), fontsize=8)
             fig2.tight_layout()
@@ -1847,11 +1889,14 @@ class DashboardApp(ctk.CTk):
             return
         sets = self.loader.db.get_settings()
         period_val = self._t(getattr(self, 'selected_period', 'Barchasi'))
+        reg_counts = (self.loader.filtered_df['Viloyat'].value_counts()
+                      if (not self.loader.filtered_df.empty and 'Viloyat' in self.loader.filtered_df.columns)
+                      else pd.Series(dtype='int64'))
         self._show_loading("📄 Word...")
         try:
             ReportGenerator.export_word_report(
                 self.loader.get_kpi_stats(),
-                self.loader.filtered_df['Viloyat'].value_counts(),
+                reg_counts,
                 fp, period_val,
                 self._t(sets.get("report_header", "O‘ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI")))
             self._hide_loading()
@@ -1869,11 +1914,14 @@ class DashboardApp(ctk.CTk):
             return
         sets = self.loader.db.get_settings()
         period_val = self._t(getattr(self, 'selected_period', 'Barchasi'))
+        reg_counts = (self.loader.filtered_df['Viloyat'].value_counts()
+                      if (not self.loader.filtered_df.empty and 'Viloyat' in self.loader.filtered_df.columns)
+                      else pd.Series(dtype='int64'))
         self._show_loading("📕 PDF...")
         try:
             ReportGenerator.export_pdf_report(
                 self.loader.get_kpi_stats(),
-                self.loader.filtered_df['Viloyat'].value_counts(),
+                reg_counts,
                 fp, period_val,
                 self._t(sets.get("report_header", "O‘ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI")))
             self._hide_loading()
