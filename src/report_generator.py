@@ -19,7 +19,7 @@ try:
     from reportlab.lib.units import cm
     from reportlab.lib import colors
     from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
-                                     TableStyle, PageBreak)
+                                     TableStyle)
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     HAS_REPORTLAB = True
@@ -34,12 +34,10 @@ class ReportGenerator:
                            header_text="O'ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI"):
         """Umumiy PDF hisobot."""
         if not HAS_REPORTLAB:
-            return None
+            raise RuntimeError("reportlab kutubxonasi o'rnatilmagan")
 
-        # Shriftni ro'yxatga olish (kirill uchun)
         font_name = "Helvetica"
         try:
-            # Windows'da standart shriftlar
             for fp in [
                 "C:/Windows/Fonts/arial.ttf",
                 "C:/Windows/Fonts/DejaVuSans.ttf",
@@ -70,29 +68,27 @@ class ReportGenerator:
 
         elements = []
 
-        # Header
-        elements.append(Paragraph(header_text, title_style))
+        safe_header = str(header_text).replace("\n", "<br/>")
+        elements.append(Paragraph(safe_header, title_style))
         davr = f"{datetime.now().year}-yil holatiga ko'ra" if period_name in ["Barchasi", ""] else f"{period_name} holatiga ko'ra"
         elements.append(Paragraph(f"MA'LUMOTNOMA<br/>({davr})", title_style))
         elements.append(Spacer(1, 0.5 * cm))
 
-        # Kirish
-        intro = (f"Hisobot davrida jami <b>{stats['total']}</b> ta murojaat kelib tushgan "
-                 f"(Telegram bot: <b>{stats['tg_total']}</b> ta, "
-                 f"Ishonch telefoni: <b>{stats['phone_total']}</b> ta).")
+        intro = (f"Hisobot davrida jami <b>{stats.get('total', 0)}</b> ta murojaat kelib tushgan "
+                 f"(Telegram bot: <b>{stats.get('tg_total', 0)}</b> ta, "
+                 f"Ishonch telefoni: <b>{stats.get('phone_total', 0)}</b> ta).")
         elements.append(Paragraph(intro, body_style))
         elements.append(Spacer(1, 0.4 * cm))
 
-        # Jadval
         elements.append(Paragraph("Asosiy ko'rsatkichlar:", h2_style))
 
         data = [
             ["T/r", "Ko'rsatkich nomi", "Soni (ta)"],
-            ["1", "Jami murojaatlar", str(stats['total'])],
-            ["2", "Agentlik hududiy xodimlarida o'rganishda", str(stats['agentlik_organish'])],
-            ["3", "Palata hududiy xodimlarida o'rganishda", str(stats['palata_organish'])],
-            ["4", "O'rganib chiqilgan", str(stats['natija_kiritilgan'])],
-            ["5", "Asossiz deb topilgan", str(stats['asossiz'])],
+            ["1", "Jami murojaatlar", str(stats.get('total', 0))],
+            ["2", "Agentlik hududiy xodimlarida o'rganishda", str(stats.get('agentlik_organish', 0))],
+            ["3", "Palata hududiy xodimlarida o'rganishda", str(stats.get('palata_organish', 0))],
+            ["4", "O'rganib chiqilgan", str(stats.get('natija_kiritilgan', 0))],
+            ["5", "Asossiz deb topilgan", str(stats.get('asossiz', 0))],
             ["6", "Muddati o'tgan (SLA)", str(stats.get('muddati_otgan', 0))],
             ["7", "Ogohlantirish", str(stats.get('ogohlantirish', 0))],
             ["8", "Takroriy murojaatlar", str(stats.get('takroriy_soni', 0))],
@@ -116,7 +112,6 @@ class ReportGenerator:
         elements.append(tbl)
         elements.append(Spacer(1, 0.5 * cm))
 
-        # Hududlar
         if reg_stats is not None and len(reg_stats) > 0:
             elements.append(Paragraph("Eng ko'p murojaat kelib tushgan hududlar:", h2_style))
             for reg, cnt in reg_stats.head(5).items():
@@ -132,7 +127,7 @@ class ReportGenerator:
     @staticmethod
     def generate_resolution_report(rec, output_path, header_text):
         if not HAS_DOCX:
-            return None
+            raise RuntimeError("python-docx kutubxonasi o'rnatilmagan")
         doc = Document()
         section = doc.sections[0]
         section.top_margin = Inches(0.8)
@@ -142,7 +137,7 @@ class ReportGenerator:
 
         p_h = doc.add_paragraph()
         p_h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r1 = p_h.add_run(header_text + "\n\n")
+        r1 = p_h.add_run(str(header_text) + "\n\n")
         r1.bold = True
         r1.font.name = 'Times New Roman'
         r1.font.size = Pt(13)
@@ -158,12 +153,12 @@ class ReportGenerator:
         table.style = 'Table Grid'
 
         rows_data = [
-            ("Kelib tushgan sana:", str(rec.get('Yaratilgan sana'))),
+            ("Kelib tushgan sana:", str(rec.get('Yaratilgan sana', ''))),
             ("Murojaat manbasi:", str(rec.get('Manba', 'Telegram bot'))),
-            ("Kategoriya:", str(rec.get('Kategoriya', '—'))),
-            ("Fuqaro (F.I.Sh.) va Tel:", f"{rec.get('F.I.Sh.')} ({rec.get('Telefon')})"),
-            ("Hudud (Viloyat / Tuman):", f"{rec.get('Viloyat')}, {rec.get('Tuman')}"),
-            ("Yakuniy holat / Chora:", f"{rec.get('Ijro_Holati')} / {rec.get('Chora_Turi')}"),
+            ("Kategoriya:", str(rec.get('Kategoriya', '') or '—')),
+            ("Fuqaro (F.I.Sh.) va Tel:", f"{rec.get('F.I.Sh.', '')} ({rec.get('Telefon', '')})"),
+            ("Hudud (Viloyat / Tuman):", f"{rec.get('Viloyat', '')}, {rec.get('Tuman', '')}"),
+            ("Yakuniy holat / Chora:", f"{rec.get('Ijro_Holati', '')} / {rec.get('Chora_Turi', '')}"),
         ]
 
         for i, (k, v) in enumerate(rows_data):
@@ -207,7 +202,7 @@ class ReportGenerator:
         p_sign = doc.add_paragraph()
         p_sign.paragraph_format.space_before = Pt(30)
         p_sign.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        r_s = p_sign.add_run(f"O'rganish o'tkazgan xodim:\n{str(rec.get('Masul_Komplayens'))} ____________")
+        r_s = p_sign.add_run(f"O'rganish o'tkazgan xodim:\n{str(rec.get('Masul_Komplayens', ''))} ____________")
         r_s.font.name = 'Times New Roman'
         r_s.font.size = Pt(11)
 
@@ -217,17 +212,18 @@ class ReportGenerator:
     # ================= EXCEL =================
     @staticmethod
     def export_excel(df, file_path):
-        export_df = df.copy()
-        if 'DT' in export_df.columns and export_df['DT'].notnull().any():
-            export_df = export_df.sort_values(by='DT', ascending=False)
-        elif 'Yaratilgan sana' in export_df.columns:
-            export_df = export_df.sort_values(by='Yaratilgan sana', ascending=False)
+        export_df = df.copy() if df is not None else pd.DataFrame()
+        if not export_df.empty:
+            if 'DT' in export_df.columns and export_df['DT'].notnull().any():
+                export_df = export_df.sort_values(by='DT', ascending=False)
+            elif 'Yaratilgan sana' in export_df.columns:
+                export_df = export_df.sort_values(by='Yaratilgan sana', ascending=False)
 
         cols = ['Yaratilgan sana', 'Manba', 'Kategoriya', 'F.I.Sh.', 'Telefon', 'Viloyat',
                 'Tuman', 'Yoʻnalish', 'Masul_Komplayens', 'Ijro_Holati',
                 'Chora_Turi', 'Organish_Natijasi', 'Murojaat matni']
         available = [c for c in cols if c in export_df.columns]
-        sub_df = export_df[available].copy()
+        sub_df = export_df[available].copy() if available else pd.DataFrame(columns=cols)
         sub_df.insert(0, 'T/r', range(1, len(sub_df) + 1))
         sub_df = sub_df.rename(columns={
             'Yaratilgan sana': 'Kelib tushgan sana',
@@ -281,14 +277,14 @@ class ReportGenerator:
             for col_idx, col_name in enumerate(sub_df.columns, 1):
                 ws.column_dimensions[get_column_letter(col_idx)].width = col_widths.get(col_name, 22)
 
-            ws.auto_filter.ref = f"A1:{get_column_letter(len(sub_df.columns))}{len(sub_df) + 1}"
+            ws.auto_filter.ref = f"A1:{get_column_letter(len(sub_df.columns))}{max(1, len(sub_df) + 1)}"
 
     # ================= WORD (UMUMIY) =================
     @staticmethod
     def export_word_report(stats, reg_stats, file_path, period_name="Barchasi",
                             header_text="O‘ZBEKISTON RESPUBLIKASI KADASTR AGENTLIGI"):
         if not HAS_DOCX:
-            return None
+            raise RuntimeError("python-docx kutubxonasi o'rnatilmagan")
         doc = Document()
         section = doc.sections[0]
         section.top_margin = Inches(0.8)
@@ -298,7 +294,7 @@ class ReportGenerator:
 
         p_head = doc.add_paragraph()
         p_head.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r1 = p_head.add_run(header_text + "\n")
+        r1 = p_head.add_run(str(header_text) + "\n")
         r1.bold = True
         r1.font.name = 'Times New Roman'
         r1.font.size = Pt(13)
@@ -315,8 +311,8 @@ class ReportGenerator:
         p_body.paragraph_format.line_spacing = 1.15
         p_body.paragraph_format.first_line_indent = Inches(0.4)
         r_body = p_body.add_run(
-            f"Hisobot davrida jami {stats['total']} ta murojaat kelib tushgan "
-            f"(Telegram bot: {stats['tg_total']} ta, Telefon: {stats['phone_total']} ta).")
+            f"Hisobot davrida jami {stats.get('total', 0)} ta murojaat kelib tushgan "
+            f"(Telegram bot: {stats.get('tg_total', 0)} ta, Telefon: {stats.get('phone_total', 0)} ta).")
         r_body.font.name = 'Times New Roman'
         r_body.font.size = Pt(12)
 
@@ -336,11 +332,11 @@ class ReportGenerator:
                 r.font.size = Pt(11)
 
         data_rows = [
-            ("1", "Jami ko‘rib chiqilayotgan murojaatlar", str(stats['total'])),
-            ("2", "Agentlik hududiy komplayens xodimlarida o‘rganishda", str(stats['agentlik_organish'])),
-            ("3", "Palata hududiy komplayens xodimlarida o‘rganishda", str(stats['palata_organish'])),
-            ("4", "O‘rganib chiqilgan (chora ko‘rilgan / asossiz)", str(stats['natija_kiritilgan'])),
-            ("5", "— Shundan Asossiz deb topilganlar", str(stats['asossiz'])),
+            ("1", "Jami ko‘rib chiqilayotgan murojaatlar", str(stats.get('total', 0))),
+            ("2", "Agentlik hududiy komplayens xodimlarida o‘rganishda", str(stats.get('agentlik_organish', 0))),
+            ("3", "Palata hududiy komplayens xodimlarida o‘rganishda", str(stats.get('palata_organish', 0))),
+            ("4", "O‘rganib chiqilgan (chora ko‘rilgan / asossiz)", str(stats.get('natija_kiritilgan', 0))),
+            ("5", "— Shundan Asossiz deb topilganlar", str(stats.get('asossiz', 0))),
             ("6", "Muddati o‘tgan (SLA)", str(stats.get('muddati_otgan', 0))),
         ]
         for row in data_rows:
@@ -356,19 +352,20 @@ class ReportGenerator:
                     r.font.name = 'Times New Roman'
                     r.font.size = Pt(11)
 
-        p_reg = doc.add_paragraph()
-        p_reg.paragraph_format.space_before = Pt(12)
-        r_reg_h = p_reg.add_run("Eng ko‘p murojaat kelib tushgan hududlar:")
-        r_reg_h.bold = True
-        r_reg_h.font.name = 'Times New Roman'
-        r_reg_h.font.size = Pt(12)
+        if reg_stats is not None and len(reg_stats) > 0:
+            p_reg = doc.add_paragraph()
+            p_reg.paragraph_format.space_before = Pt(12)
+            r_reg_h = p_reg.add_run("Eng ko‘p murojaat kelib tushgan hududlar:")
+            r_reg_h.bold = True
+            r_reg_h.font.name = 'Times New Roman'
+            r_reg_h.font.size = Pt(12)
 
-        for reg, cnt in reg_stats.head(5).items():
-            p_item = doc.add_paragraph()
-            p_item.paragraph_format.left_indent = Inches(0.2)
-            r_item = p_item.add_run(f"• {reg}: {cnt} ta murojaat")
-            r_item.font.name = 'Times New Roman'
-            r_item.font.size = Pt(11)
+            for reg, cnt in reg_stats.head(5).items():
+                p_item = doc.add_paragraph()
+                p_item.paragraph_format.left_indent = Inches(0.2)
+                r_item = p_item.add_run(f"• {reg}: {cnt} ta murojaat")
+                r_item.font.name = 'Times New Roman'
+                r_item.font.size = Pt(11)
 
         doc.save(file_path)
         return file_path
