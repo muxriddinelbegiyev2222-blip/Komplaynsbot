@@ -1,23 +1,36 @@
 import sys
 import os
 import ssl
+import json
+import hashlib
 import sqlite3
 import pandas as pd
 import shutil
 import threading
-import bcrypt
 from datetime import datetime, timedelta
-import urllib3
-import requests
 
 from src.logger import log, log_error, log_info, log_warning, cleanup_old_logs
 
-urllib3.disable_warnings()
+try:
+    import urllib3
+    import requests
+    urllib3.disable_warnings()
+    _orig_session_init = requests.Session.__init__
 
-_orig_session_init = requests.Session.__init__
-def _no_ssl_session_init(self, *args, **kwargs):
-    _orig_session_init(self, *args, **kwargs)
-requests.Session.__init__ = _no_ssl_session_init
+    def _no_ssl_session_init(self, *args, **kwargs):
+        _orig_session_init(self, *args, **kwargs)
+        self.verify = False
+
+    requests.Session.__init__ = _no_ssl_session_init
+except ImportError:
+    pass
+
+try:
+    import bcrypt
+    HAS_BCRYPT = True
+except ImportError:
+    bcrypt = None
+    HAS_BCRYPT = False
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -26,15 +39,20 @@ else:
 
 try:
     import gspread
-    from oauth2client.service_account import ServiceAccountCredentials
+    try:
+        from oauth2client.service_account import ServiceAccountCredentials
+    except ImportError:
+        ServiceAccountCredentials = None
     HAS_GSHEETS = True
 except ImportError:
     HAS_GSHEETS = False
+    ServiceAccountCredentials = None
 
 
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_MINUTES = 5
 BACKUP_KEEP_DAYS = 30
+DEFAULT_SPREADSHEET_ID = "17igQpL4sNkEyQnIkJ58oqWVKQpVHh0mj4njx-UJXN34"
 
 
 def get_secure_credentials_path():
@@ -49,24 +67,23 @@ def get_secure_credentials_path():
 
 def migrate_credentials():
     secure_path = get_secure_credentials_path()
-    if os.path.exists(secure_path):
-        return secure_path
-    old_paths = [
+    candidate_paths = [
         os.path.join(BASE_DIR, "data", "credentials.json"),
         os.path.join(BASE_DIR, "credentials.json"),
     ]
-    for old in old_paths:
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        candidate_paths.append(os.path.join(sys._MEIPASS, "data", "credentials.json"))
+        candidate_paths.append(os.path.join(sys._MEIPASS, "credentials.json"))
+
+    for old in candidate_paths:
         if os.path.exists(old):
             try:
                 shutil.copy2(old, secure_path)
-                log_info("credentials.json xavfsiz joyga ko'chirildi")
-                try:
-                    os.remove(old)
-                except OSError:
-                    pass
+                log_info(f"credentials.json nusxalandi: {old} -> {secure_path}")
                 return secure_path
             except (OSError, shutil.SameFileError) as e:
-                log_error(e, "credentials ko'chirish")
+                log_error(e, "credentials nusxalash")
+                return old
     return secure_path
 
 
@@ -92,6 +109,13 @@ KATEGORIYALAR = [
     "Boshqa",
 ]
 
+MUROJAAT_HEADERS = [
+    '#', 'Yaratilgan sana', 'F.I.Sh.', 'Telefon', 'Viloyat', 'Tuman',
+    'Yoʻnalish', 'Aniq_Yonalish', 'Holat', 'Murojaat matni', 'Javob',
+    'Javob bergan', 'Javob sanasi', 'Ijro_Holati', 'Organish_Natijasi',
+    'Biriktirilgan_Fayl', 'Masul_Komplayens', 'Chora_Turi', 'Manba'
+]
+
 
 class DatabaseManager:
     def __init__(self, db_path=None):
@@ -101,6 +125,8 @@ class DatabaseManager:
 
         self.json_key_path = migrate_credentials()
         self.sheet_name = "Murojaatlar_Bazasi"
+        self.spreadsheet_id = DEFAULT_SPREADSHEET_ID
+        self.spreadsheet = None
 
         self._init_db()
         self._seed_xodimlar()
@@ -109,21 +135,51 @@ class DatabaseManager:
         cleanup_old_logs(days=30)
 
         self.client = self._connect_gsheets()
-        self.sheet = self._ensure_worksheet("Murojaatlar", [
-            '#', 'Yaratilgan sana', 'F.I.Sh.', 'Telefon', 'Viloyat', 'Tuman',
-            'Yoʻnalish', 'Aniq_Yonalish', 'Holat', 'Murojaat matni', 'Javob',
-            'Javob bergan', 'Javob sanasi', 'Ijro_Holati', 'Organish_Natijasi',
-            'Biriktirilgan_Fayl', 'Masul_Komplayens', 'Chora_Turi', 'Manba'
-        ], 20)
-        self.users_sheet = self._ensure_worksheet("Foydalanuvchilar",
-                                                   ['ID', 'Username', 'Password', 'Role', 'Active'], 5)
-        self.audit_sheet = self._ensure_worksheet("Kirishlar_Tarixi",
-                                                   ['ID', 'Foydalanuvchi', 'Rol', 'Kirish vaqti', 'Kompyuter nomi'], 5)
+        self.sheet = self._ensure_worksheet("Murojaatlar", MUROJAAT_HEADERS, 20)
+        self.users_sheet = self._ensure_worksheet(
+            "Foydalanuvchilar",
+            ['ID', 'Username', 'Password', 'Role', 'Active'],
+            5
+        )
+        self.audit_sheet = self._ensure_worksheet(
+            "Kirishlar_Tarixi",
+            ['ID', 'Foydalanuvchi', 'Rol', 'Kirish vaqti', 'Kompyuter nomi'],
+            5
+        )
 
         self._sync_users()
         self._sync_murojaatlar()
         self._process_pending_queue()
         log_info("Dastur ishga tushdi")
+
+    @staticmethod
+    def _safe_get_records(worksheet):
+        """Google Sheets varag'idan dublikat yoki bo'sh ustun xatolarisiz yozuvlarni o'qish."""
+        if worksheet is None:
+            return []
+        try:
+            all_vals = worksheet.get_all_values()
+            if not all_vals or len(all_vals) < 2:
+                return []
+            raw_headers = all_vals[0]
+            headers = [str(h).strip() for h in raw_headers]
+            records = []
+            for row in all_vals[1:]:
+                if not any(str(cell).strip() for cell in row):
+                    continue
+                rec = {}
+                for idx, h in enumerate(headers):
+                    if not h:
+                        continue
+                    rec[h] = row[idx] if idx < len(row) else ""
+                records.append(rec)
+            return records
+        except Exception as e:
+            log_error(e, "safe_get_records")
+            try:
+                return worksheet.get_all_records()
+            except Exception:
+                return []
 
     def _seed_xodimlar(self):
         try:
@@ -149,33 +205,41 @@ class DatabaseManager:
 
     @staticmethod
     def hash_password(password):
-        if isinstance(password, str):
-            password = password.encode('utf-8')
-        salt = bcrypt.gensalt()
-        return bcrypt.hashpw(password, salt).decode('utf-8')
+        pwd_str = str(password)
+        if HAS_BCRYPT:
+            pwd_bytes = pwd_str.encode('utf-8')
+            salt = bcrypt.gensalt()
+            return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
+        return "$sha256$" + hashlib.sha256(pwd_str.encode('utf-8')).hexdigest()
 
     @staticmethod
     def check_password(password, hashed):
         if not hashed:
             return False
-        try:
-            if isinstance(password, str):
-                password = password.encode('utf-8')
-            if isinstance(hashed, str):
-                hashed = hashed.encode('utf-8')
-            return bcrypt.checkpw(password, hashed)
-        except (ValueError, TypeError):
-            return False
+        hashed_str = str(hashed)
+        pwd_str = str(password)
+        if hashed_str.startswith("$sha256$"):
+            expected = "$sha256$" + hashlib.sha256(pwd_str.encode('utf-8')).hexdigest()
+            return hashed_str == expected
+        if HAS_BCRYPT and hashed_str.startswith(('$2b$', '$2a$', '$2y$')):
+            try:
+                return bcrypt.checkpw(pwd_str.encode('utf-8'), hashed_str.encode('utf-8'))
+            except (ValueError, TypeError):
+                return False
+        return pwd_str == hashed_str
 
     @staticmethod
     def is_hashed(password):
         if not password:
             return False
         pwd_str = str(password)
-        return pwd_str.startswith(('$2b$', '$2a$', '$2y$')) and len(pwd_str) == 60
+        return (
+            (pwd_str.startswith(('$2b$', '$2a$', '$2y$')) and len(pwd_str) == 60)
+            or pwd_str.startswith('$sha256$')
+        )
 
     def _get_connection(self):
-        return sqlite3.connect(self.db_path)
+        return sqlite3.connect(self.db_path, timeout=15)
 
     def _auto_backup(self):
         try:
@@ -303,29 +367,46 @@ class DatabaseManager:
 
     def _connect_gsheets(self):
         if not HAS_GSHEETS or not os.path.exists(self.json_key_path):
-            log_warning("Google Sheets ulanmagan")
+            log_warning("Google Sheets ulanmagan (credentials.json topilmadi)")
             return None
         try:
-            scope = ["https://www.googleapis.com/auth/spreadsheets",
-                     "https://www.googleapis.com/auth/drive"]
-            creds = ServiceAccountCredentials.from_json_keyfile_name(self.json_key_path, scope)
-            client = gspread.authorize(creds)
-            log_info("Google Sheets ulandi")
+            scope = [
+                "https://spreadsheets.google.com/feeds",
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"
+            ]
+            client = None
+            if hasattr(gspread, "service_account"):
+                try:
+                    client = gspread.service_account(filename=self.json_key_path, scopes=scope)
+                except Exception:
+                    client = None
+            if client is None and ServiceAccountCredentials is not None:
+                creds = ServiceAccountCredentials.from_json_keyfile_name(self.json_key_path, scope)
+                client = gspread.authorize(creds)
+
+            if client is not None:
+                try:
+                    self.spreadsheet = client.open_by_key(self.spreadsheet_id)
+                except Exception:
+                    self.spreadsheet = client.open(self.sheet_name)
+                log_info("Google Sheets muvaffaqiyatli ulandi")
             return client
         except Exception as e:
             log_error(e, "gsheets ulanish")
+            self.spreadsheet = None
             return None
 
     def _ensure_worksheet(self, title, headers, cols):
-        if self.client is None:
+        if self.client is None or self.spreadsheet is None:
             return None
         try:
-            spreadsheet = self.client.open(self.sheet_name)
             try:
-                sheet = spreadsheet.worksheet(title)
+                sheet = self.spreadsheet.worksheet(title)
             except Exception:
-                sheet = spreadsheet.add_worksheet(title=title, rows="1000", cols=str(cols))
-            if not sheet.row_values(1):
+                sheet = self.spreadsheet.add_worksheet(title=title, rows="1000", cols=str(cols))
+            first_row = sheet.row_values(1)
+            if not first_row:
                 sheet.insert_row(headers, 1)
             return sheet
         except Exception as e:
@@ -334,7 +415,6 @@ class DatabaseManager:
 
     def _add_to_pending(self, action_type, murojaat_id, payload=""):
         try:
-            import json
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
@@ -350,7 +430,7 @@ class DatabaseManager:
             return False
 
     def _process_pending_queue(self):
-        if self.client is None:
+        if self.client is None or self.sheet is None:
             return
         try:
             with self._get_connection() as conn:
@@ -364,7 +444,7 @@ class DatabaseManager:
                 for row in rows:
                     pid, action, m_id = row
                     try:
-                        if action == "update":
+                        if action in ("update", "insert"):
                             row_data = self._get_row_by_id(m_id)
                             if row_data and self.sheet:
                                 self._sync_single_row_to_cloud(row_data)
@@ -475,10 +555,14 @@ class DatabaseManager:
 
         if not found_role and self.users_sheet:
             try:
-                records = self.users_sheet.get_all_records()
+                records = self._safe_get_records(self.users_sheet)
                 for row in records:
+                    try:
+                        active_val = int(row.get('Active', 1) or 1)
+                    except (ValueError, TypeError):
+                        active_val = 1
                     if (str(row.get('Username', '')).strip() == username
-                            and int(row.get('Active', 1)) == 1):
+                            and active_val == 1):
                         cloud_password = str(row.get('Password', '')).strip()
                         cloud_role = str(row.get('Role', '')).strip()
                         if self.is_hashed(cloud_password):
@@ -541,7 +625,7 @@ class DatabaseManager:
         if self.users_sheet is None:
             return
         try:
-            cloud_records = self.users_sheet.get_all_records()
+            cloud_records = self._safe_get_records(self.users_sheet)
             cloud_usernames = set()
             with self._get_connection() as conn:
                 cursor = conn.cursor()
@@ -549,7 +633,10 @@ class DatabaseManager:
                     un = str(row.get('Username', '')).strip()
                     pw = str(row.get('Password', '')).strip()
                     rl = str(row.get('Role', '')).strip()
-                    act = int(row.get('Active', 1))
+                    try:
+                        act = int(row.get('Active', 1) or 1)
+                    except (ValueError, TypeError):
+                        act = 1
                     if not un or un == 'DELETED':
                         continue
                     cloud_usernames.add(un)
@@ -581,14 +668,14 @@ class DatabaseManager:
         if self.sheet is None:
             return
         try:
-            records = self.sheet.get_all_records()
+            records = self._safe_get_records(self.sheet)
             cloud_ids = set()
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 df = pd.DataFrame(records)
                 for _, row in df.iterrows():
                     try:
-                        m_id = int(row.get('#', 0))
+                        m_id = int(float(str(row.get('#', 0)).strip()))
                     except (ValueError, TypeError):
                         continue
                     if m_id <= 9:
@@ -596,22 +683,53 @@ class DatabaseManager:
                     cloud_ids.add(m_id)
                     cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
                     if not cursor.fetchone():
-                        cursor.execute("""INSERT INTO murojaatlar (id, yaratilgan_sana, fish, telefon, viloyat, tuman, yonalish, aniq_yonalish, holat, murojaat_matni, javob, javob_bergan, javob_sanasi, ijro_holati, organish_natijasi, biriktirilgan_fayl, masul_komplayens, chora_turi, manba) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        yonalish_val = str(row.get('Yoʻnalish', row.get("Yo'nalish", '')))
+                        aniq_val = str(row.get('Aniq_Yonalish', ''))
+                        if not aniq_val:
+                            aniq_val = (
+                                "Davlat kadastrlari palatasi hududiy boshqarmasi"
+                                if "palata" in yonalish_val.lower()
+                                else "Kadastr agentligi hududiy boshqarmasi"
+                            )
+                        masul_val = str(row.get('Masul_Komplayens', ''))
+                        if not masul_val:
+                            masul_val = (
+                                "Davlat kadastrlari palatasi hududiy komplayens xodimi"
+                                if "palata" in yonalish_val.lower()
+                                else "Kadastr agentligi hududiy komplayens xodimi"
+                            )
+                        cursor.execute("""INSERT INTO murojaatlar (
+                            id, yaratilgan_sana, fish, telefon, viloyat, tuman,
+                            yonalish, aniq_yonalish, holat, murojaat_matni, javob,
+                            javob_bergan, javob_sanasi, ijro_holati, organish_natijasi,
+                            biriktirilgan_fayl, masul_komplayens, chora_turi, manba
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                                        (m_id, str(row.get('Yaratilgan sana', '')),
                                         str(row.get('F.I.Sh.', '')), str(row.get('Telefon', '')),
                                         str(row.get('Viloyat', '')), str(row.get('Tuman', '')),
-                                        str(row.get('Yoʻnalish', '')), str(row.get('Aniq_Yonalish', '')),
-                                        str(row.get('Holat', '')), str(row.get('Murojaat matni', '')),
+                                        yonalish_val, aniq_val,
+                                        str(row.get('Holat', 'Yangi') or 'Yangi'),
+                                        str(row.get('Murojaat matni', '')),
                                         str(row.get('Javob', '')), str(row.get('Javob bergan', '')),
                                         str(row.get('Javob sanasi', '')),
-                                        str(row.get('Ijro_Holati', 'O‘rganishga yuborilgan')),
+                                        str(row.get('Ijro_Holati', '') or 'O‘rganishga yuborilgan'),
                                         str(row.get('Organish_Natijasi', '')),
                                         str(row.get('Biriktirilgan_Fayl', '')),
-                                        str(row.get('Masul_Komplayens', '')),
-                                        str(row.get('Chora_Turi', 'Chora ko‘rilmagan')),
-                                        str(row.get('Manba', 'Telegram bot'))))
+                                        masul_val,
+                                        str(row.get('Chora_Turi', '') or 'Chora ko‘rilmagan'),
+                                        str(row.get('Manba', '') or 'Telegram bot')))
                     else:
-                        cursor.execute("""UPDATE murojaatlar SET holat = ?, ijro_holati = ?, organish_natijasi = ?, biriktirilgan_fayl = ?, masul_komplayens = ?, chora_turi = ?, javob = ?, javob_bergan = ?, javob_sanasi = ? WHERE id = ?""",
+                        cursor.execute("""UPDATE murojaatlar SET
+                            holat = COALESCE(NULLIF(?, ''), holat),
+                            ijro_holati = COALESCE(NULLIF(?, ''), ijro_holati),
+                            organish_natijasi = COALESCE(NULLIF(?, ''), organish_natijasi),
+                            biriktirilgan_fayl = COALESCE(NULLIF(?, ''), biriktirilgan_fayl),
+                            masul_komplayens = COALESCE(NULLIF(?, ''), masul_komplayens),
+                            chora_turi = COALESCE(NULLIF(?, ''), chora_turi),
+                            javob = COALESCE(NULLIF(?, ''), javob),
+                            javob_bergan = COALESCE(NULLIF(?, ''), javob_bergan),
+                            javob_sanasi = COALESCE(NULLIF(?, ''), javob_sanasi)
+                            WHERE id = ?""",
                                        (str(row.get('Holat', '')), str(row.get('Ijro_Holati', '')),
                                         str(row.get('Organish_Natijasi', '')),
                                         str(row.get('Biriktirilgan_Fayl', '')),
@@ -621,16 +739,191 @@ class DatabaseManager:
                                         m_id))
                 conn.commit()
                 cursor.execute("SELECT * FROM murojaatlar WHERE id > 9")
-                missing = [[str(x) if x is not None else "" for x in r]
+                missing = [[str(x) if x is not None else "" for x in r[:19]]
                            for r in cursor.fetchall() if r[0] not in cloud_ids]
                 if missing:
                     self.sheet.append_rows(missing)
         except Exception as e:
             log_error(e, "sync_murojaatlar")
 
-    def get_all_records(self):
+    def sync_excel_data(self, df):
+        """Excel fayldan yuklangan ma'lumotlarni SQLite va Google Sheets bilan sinxronlash."""
+        if df is None or df.empty:
+            return 0
+
+        def _clean_val(val, default=""):
+            if val is None:
+                return default
+            try:
+                if pd.isna(val):
+                    return default
+            except (TypeError, ValueError):
+                pass
+            s = str(val).strip()
+            return default if s.lower() == "nan" else s
+
+        inserted_or_updated = 0
+        new_rows_for_cloud = []
+
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COALESCE(MAX(id), 100) FROM murojaatlar")
+                next_auto_id = max(cursor.fetchone()[0] + 1, 101)
+
+                for _, row in df.iterrows():
+                    raw_id = row.get('#', row.get('id', row.get('ID', None)))
+                    m_id = None
+                    if raw_id is not None:
+                        try:
+                            if not pd.isna(raw_id):
+                                m_id = int(float(str(raw_id).strip()))
+                        except (ValueError, TypeError):
+                            m_id = None
+                    if m_id is None:
+                        m_id = next_auto_id
+                        next_auto_id += 1
+                    if m_id <= 9:
+                        continue
+
+                    yaratilgan_sana = _clean_val(
+                        row.get('Yaratilgan sana', row.get('Kelib tushgan sana', '')),
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    )
+                    fish = _clean_val(row.get('F.I.Sh.', row.get('fish', '')))
+                    telefon = _clean_val(row.get('Telefon', row.get('telefon', '')))
+                    viloyat = _clean_val(row.get('Viloyat', row.get('viloyat', '')))
+                    tuman = _clean_val(row.get('Tuman', row.get('tuman', '')))
+                    yonalish = _clean_val(
+                        row.get('Yoʻnalish', row.get("Yo'nalish", row.get('Yoʻnalish turi', '')))
+                    )
+                    aniq_yonalish = _clean_val(row.get('Aniq_Yonalish', ''))
+                    if not aniq_yonalish:
+                        aniq_yonalish = (
+                            "Davlat kadastrlari palatasi hududiy boshqarmasi"
+                            if "palata" in yonalish.lower()
+                            else "Kadastr agentligi hududiy boshqarmasi"
+                        )
+                    holat = _clean_val(row.get('Holat', 'Yangi'), 'Yangi')
+                    murojaat_matni = _clean_val(
+                        row.get('Murojaat matni', row.get('Murojaat mazmuni', ''))
+                    )
+                    javob = _clean_val(row.get('Javob', ''))
+                    javob_bergan = _clean_val(row.get('Javob bergan', ''))
+                    javob_sanasi = _clean_val(row.get('Javob sanasi', ''))
+                    ijro_holati = _clean_val(
+                        row.get('Ijro_Holati', row.get('Ijro holati', '')),
+                        'O‘rganishga yuborilgan'
+                    )
+                    organish_natijasi = _clean_val(
+                        row.get('Organish_Natijasi', row.get('O‘rganish natijasi', ''))
+                    )
+                    biriktirilgan_fayl = _clean_val(row.get('Biriktirilgan_Fayl', ''))
+                    masul_komplayens = _clean_val(
+                        row.get('Masul_Komplayens', row.get('Mas’ul komplayens organi', ''))
+                    )
+                    if not masul_komplayens:
+                        masul_komplayens = (
+                            "Davlat kadastrlari palatasi hududiy komplayens xodimi"
+                            if "palata" in yonalish.lower()
+                            else "Kadastr agentligi hududiy komplayens xodimi"
+                        )
+                    chora_turi = _clean_val(
+                        row.get('Chora_Turi', row.get('Ko‘rilgan chora', '')),
+                        'Chora ko‘rilmagan'
+                    )
+                    manba = _clean_val(
+                        row.get('Manba', row.get('Murojaat manbasi', '')),
+                        'Telegram bot'
+                    )
+                    kategoriya = _clean_val(row.get('Kategoriya', ''))
+
+                    cursor.execute("SELECT id FROM murojaatlar WHERE id = ?", (m_id,))
+                    exists = cursor.fetchone()
+
+                    if not exists:
+                        cursor.execute("""
+                            INSERT INTO murojaatlar (
+                                id, yaratilgan_sana, fish, telefon, viloyat, tuman,
+                                yonalish, aniq_yonalish, holat, murojaat_matni, javob,
+                                javob_bergan, javob_sanasi, ijro_holati, organish_natijasi,
+                                biriktirilgan_fayl, masul_komplayens, chora_turi, manba, kategoriya
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            m_id, yaratilgan_sana, fish, telefon, viloyat, tuman,
+                            yonalish, aniq_yonalish, holat, murojaat_matni, javob,
+                            javob_bergan, javob_sanasi, ijro_holati, organish_natijasi,
+                            biriktirilgan_fayl, masul_komplayens, chora_turi, manba, kategoriya
+                        ))
+                        new_rows_for_cloud.append([
+                            str(m_id), yaratilgan_sana, fish, telefon, viloyat, tuman,
+                            yonalish, aniq_yonalish, holat, murojaat_matni, javob,
+                            javob_bergan, javob_sanasi, ijro_holati, organish_natijasi,
+                            biriktirilgan_fayl, masul_komplayens, chora_turi, manba
+                        ])
+                    else:
+                        cursor.execute("""
+                            UPDATE murojaatlar SET
+                                yaratilgan_sana = COALESCE(NULLIF(?, ''), yaratilgan_sana),
+                                fish = COALESCE(NULLIF(?, ''), fish),
+                                telefon = COALESCE(NULLIF(?, ''), telefon),
+                                viloyat = COALESCE(NULLIF(?, ''), viloyat),
+                                tuman = COALESCE(NULLIF(?, ''), tuman),
+                                yonalish = COALESCE(NULLIF(?, ''), yonalish),
+                                aniq_yonalish = COALESCE(NULLIF(?, ''), aniq_yonalish),
+                                holat = COALESCE(NULLIF(?, ''), holat),
+                                murojaat_matni = COALESCE(NULLIF(?, ''), murojaat_matni),
+                                javob = COALESCE(NULLIF(?, ''), javob),
+                                javob_bergan = COALESCE(NULLIF(?, ''), javob_bergan),
+                                javob_sanasi = COALESCE(NULLIF(?, ''), javob_sanasi),
+                                ijro_holati = COALESCE(NULLIF(?, ''), ijro_holati),
+                                organish_natijasi = COALESCE(NULLIF(?, ''), organish_natijasi),
+                                biriktirilgan_fayl = COALESCE(NULLIF(?, ''), biriktirilgan_fayl),
+                                masul_komplayens = COALESCE(NULLIF(?, ''), masul_komplayens),
+                                chora_turi = COALESCE(NULLIF(?, ''), chora_turi),
+                                manba = COALESCE(NULLIF(?, ''), manba),
+                                kategoriya = COALESCE(NULLIF(?, ''), kategoriya)
+                            WHERE id = ?
+                        """, (
+                            yaratilgan_sana, fish, telefon, viloyat, tuman,
+                            yonalish, aniq_yonalish, holat, murojaat_matni, javob,
+                            javob_bergan, javob_sanasi, ijro_holati, organish_natijasi,
+                            biriktirilgan_fayl, masul_komplayens, chora_turi, manba, kategoriya,
+                            m_id
+                        ))
+                    inserted_or_updated += 1
+                conn.commit()
+                log_info(f"Excel sinxronizatsiya: {inserted_or_updated} ta yozuv")
+
+            if new_rows_for_cloud and self.sheet:
+                def _push_new_excel_rows():
+                    try:
+                        existing_records = self._safe_get_records(self.sheet)
+                        cloud_ids = set()
+                        for r in existing_records:
+                            try:
+                                cloud_ids.add(str(int(float(str(r.get('#', 0)).strip()))))
+                            except (ValueError, TypeError):
+                                pass
+                        to_append = [r for r in new_rows_for_cloud if r[0] not in cloud_ids]
+                        if to_append:
+                            self.sheet.append_rows(to_append)
+                    except Exception as e:
+                        log_error(e, "excel_cloud_push")
+
+                threading.Thread(target=_push_new_excel_rows, daemon=True).start()
+
+        except Exception as e:
+            log_error(e, "sync_excel_data")
+        return inserted_or_updated
+
+    def get_all_records(self, include_archived=False):
         with self._get_connection() as conn:
-            df = pd.read_sql_query("SELECT * FROM murojaatlar WHERE id > 9 ORDER BY id DESC", conn)
+            if include_archived:
+                query = "SELECT * FROM murojaatlar WHERE id > 9 ORDER BY id DESC"
+            else:
+                query = "SELECT * FROM murojaatlar WHERE id > 9 AND COALESCE(arxiv, 0) = 0 ORDER BY id DESC"
+            df = pd.read_sql_query(query, conn)
             df = df.rename(columns={
                 'id': '#', 'yaratilgan_sana': 'Yaratilgan sana', 'fish': 'F.I.Sh.',
                 'telefon': 'Telefon', 'viloyat': 'Viloyat', 'tuman': 'Tuman',
@@ -646,7 +939,7 @@ class DatabaseManager:
             })
             if 'Manba' not in df.columns:
                 df['Manba'] = 'Telegram bot'
-            df['Manba'] = df['Manba'].fillna('Telegram bot')
+            df['Manba'] = df['Manba'].fillna('Telegram bot').replace('', 'Telegram bot')
             return df
 
     def _get_row_by_id(self, m_id):
@@ -810,8 +1103,16 @@ class DatabaseManager:
                             datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
             conn.commit()
         row_data = self._get_row_by_id(new_id)
-        if row_data and self.sheet:
-            threading.Thread(target=lambda: self._sync_single_row_to_cloud(row_data), daemon=True).start()
+        if row_data:
+            if self.sheet:
+                def _bg_sync():
+                    try:
+                        self._sync_single_row_to_cloud(row_data)
+                    except Exception:
+                        self._add_to_pending("insert", new_id)
+                threading.Thread(target=_bg_sync, daemon=True).start()
+            else:
+                self._add_to_pending("insert", new_id)
         log_info(f"Yangi telefon murojaat: #{new_id}")
         return new_id
 
@@ -887,6 +1188,15 @@ class DatabaseManager:
                           ozgartirgan, ozgartirgan_rol,
                           datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
                     conn.commit()
+                row_data = self._get_row_by_id(m_id)
+                if row_data:
+                    if self.sheet:
+                        try:
+                            self._sync_single_row_to_cloud(row_data)
+                        except Exception:
+                            self._add_to_pending("update", m_id)
+                    else:
+                        self._add_to_pending("update", m_id)
                 updated += 1
             except Exception as e:
                 log_error(e, f"bulk #{m_id}")
@@ -896,7 +1206,10 @@ class DatabaseManager:
     def get_trend_stats(self, days=30):
         try:
             with self._get_connection() as conn:
-                df = pd.read_sql_query("SELECT yaratilgan_sana FROM murojaatlar WHERE id > 9", conn)
+                df = pd.read_sql_query(
+                    "SELECT yaratilgan_sana FROM murojaatlar WHERE id > 9 AND COALESCE(arxiv, 0) = 0",
+                    conn
+                )
             if df.empty:
                 return {"current": 0, "previous": 0, "change_pct": 0, "change_abs": 0}
             df['DT'] = pd.to_datetime(df['yaratilgan_sana'], errors='coerce')
@@ -914,12 +1227,14 @@ class DatabaseManager:
             log_error(e, "trend")
             return {"current": 0, "previous": 0, "change_abs": 0, "change_pct": 0}
 
-    # ================= YANGI: KENGAYTIRILGAN STATISTIKA =================
     def get_extended_stats(self):
         """Kengaytirilgan statistika — BOSQICH 7."""
         try:
             with self._get_connection() as conn:
-                df = pd.read_sql_query("SELECT * FROM murojaatlar WHERE id > 9", conn)
+                df = pd.read_sql_query(
+                    "SELECT * FROM murojaatlar WHERE id > 9 AND COALESCE(arxiv, 0) = 0",
+                    conn
+                )
             if df.empty:
                 return {}
 
@@ -1131,7 +1446,21 @@ class DatabaseManager:
 
     def sync_pull_from_cloud(self):
         if self.client is None:
-            raise RuntimeError("Google Sheets ulanmagan")
+            self.client = self._connect_gsheets()
+            if self.client is not None:
+                self.sheet = self._ensure_worksheet("Murojaatlar", MUROJAAT_HEADERS, 20)
+                self.users_sheet = self._ensure_worksheet(
+                    "Foydalanuvchilar",
+                    ['ID', 'Username', 'Password', 'Role', 'Active'],
+                    5
+                )
+                self.audit_sheet = self._ensure_worksheet(
+                    "Kirishlar_Tarixi",
+                    ['ID', 'Foydalanuvchi', 'Rol', 'Kirish vaqti', 'Kompyuter nomi'],
+                    5
+                )
+        if self.client is None:
+            raise RuntimeError("Google Sheets ulanmagan (credentials.json yoki internetni tekshiring)")
         self._sync_users()
         self._sync_murojaatlar()
         self._process_pending_queue()
