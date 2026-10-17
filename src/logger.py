@@ -25,6 +25,11 @@ def setup_logger(name="Komplaynsbot", level=logging.INFO):
     if logger.handlers:
         return logger
 
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
     log_file = os.path.join(LOG_DIR, "app.log")
     file_handler = RotatingFileHandler(
         log_file,
@@ -33,19 +38,17 @@ def setup_logger(name="Komplaynsbot", level=logging.INFO):
         encoding="utf-8"
     )
     file_handler.setLevel(logging.DEBUG)
-
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO)
-
-    formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
     file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-
     logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+
+    if sys.stdout is not None:
+        try:
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(logging.INFO)
+            console_handler.setFormatter(formatter)
+            logger.addHandler(console_handler)
+        except Exception:
+            pass
 
     return logger
 
